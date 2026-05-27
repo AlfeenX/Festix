@@ -104,25 +104,12 @@ export default function EventDetailPage() {
         body: JSON.stringify({ user_id: user.id, event_id: id, seat_ids: Array.from(selected) }),
       });
 
-      const paymentAmount = Number(order.order.total_amount);
-      if (Number.isNaN(paymentAmount)) throw new Error('Invalid order amount');
-
-      const payment = await api<{ success: boolean }>('/payments/pay', {
-        method: 'POST',
-        body: JSON.stringify({ order_id: order.order.id, amount: paymentAmount }),
+      showFlash({
+        type: 'success',
+        title: 'Order dibuat',
+        description: 'Lanjutkan checkout dan pilih metode pembayaran.',
       });
-
-      if (payment.success) {
-        showFlash({
-          type: 'success',
-          title: 'Pembayaran berhasil',
-          description: 'Tiket digital Anda sedang disiapkan.',
-        });
-        router.push(`/orders?success=${order.order.id}`);
-      } else {
-        setError('Payment failed. Please try again.');
-        showFlash({ type: 'error', title: 'Pembayaran gagal', description: 'Payment failed. Please try again.' });
-      }
+      router.push(`/checkout/${order.order.id}`);
     } catch (e) {
       const description = e instanceof Error ? e.message : 'Checkout failed';
       setError(description);

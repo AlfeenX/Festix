@@ -1,116 +1,137 @@
 'use client';
 
-import { Ticket, Barcode, Calendar, Receipt } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import QRCode from 'qrcode';
+import { ArrowRight, Calendar, CheckCircle2, Clock3, QrCode, Receipt, Ticket } from 'lucide-react';
 import { Order } from '@/lib/api';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 
 interface TicketCardProps {
   order: Order;
 }
 
-export function TicketCard({ order }: TicketCardProps) {
-  const formattedDate = order.created_at
-    ? new Date(order.created_at).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : '—';
+function formatCurrency(value: number | string) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) * 1000);
+}
 
+function formatDate(value?: string) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function statusTone(status: string) {
+  if (status === 'PAID') return 'border-emerald-500/25 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300';
+  if (status === 'FAILED' || status === 'CANCELLED') return 'border-red-500/25 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300';
+  return 'border-amber-500/25 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300';
+}
+
+export function TicketCard({ order }: TicketCardProps) {
+  const [ticketQr, setTicketQr] = useState<Record<string, string>>({});
   const isPaid = order.status === 'PAID';
 
+  useEffect(() => {
+    let active = true;
+    async function buildQr() {
+      const entries = await Promise.all(
+        (order.tickets || []).map(async (ticket) => {
+          const value = ticket.qr_data || ticket.ticket_code;
+          const image = await QRCode.toDataURL(value, {
+            width: 180,
+            margin: 1,
+            color: { dark: '#111827', light: '#ffffff' },
+          });
+          return [ticket.id, image] as const;
+        })
+      );
+      if (active) setTicketQr(Object.fromEntries(entries));
+    }
+    buildQr().catch(console.error);
+    return () => { active = false; };
+  }, [order.tickets]);
+
   return (
-    <Card className="overflow-hidden shadow-md flex flex-col md:flex-row w-full relative py-0 gap-0">
-      {/* Left colored accent */}
-      <div className={`w-3 md:w-4 ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'} shrink-0`} />
-
-      {/* Main ticket body */}
-      <CardContent className="p-6 flex-grow flex flex-col justify-between gap-4">
-        <div>
-          <div className="flex justify-between items-start gap-4 flex-wrap">
-            <div>
-              <span className="text-xs uppercase tracking-widest font-bold text-primary/80">
-                E-Ticket
-              </span>
-              <h3 className="text-xl font-bold font-sora text-foreground mt-1">
-                {order.event_title || 'Event'}
-              </h3>
-            </div>
-            
-            <div className="flex flex-col items-end gap-1">
-              <Badge variant={isPaid ? "default" : "outline"} className={`h-6 font-bold ${
-                isPaid 
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10' 
-                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/10'
-              }`}>
-                {order.status}
-              </Badge>
-              <span className="text-xs text-muted-foreground mt-1">
-                ID: #{order.id.slice(0, 8)}
-              </span>
-            </div>
+    <article className="overflow-hidden rounded-lg border border-border bg-card shadow-none">
+      <div className="flex flex-col gap-4 border-b border-border p-5 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={`rounded-md ${statusTone(order.status)}`}>
+              {isPaid ? <CheckCircle2 className="mr-1 h-3 w-3" /> : <Clock3 className="mr-1 h-3 w-3" />}
+              {order.status}
+            </Badge>
+            <span className="text-xs font-mono text-muted-foreground">#{order.id.slice(0, 8)}</span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary/70 shrink-0" />
-              <span>{formattedDate}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-primary/70 shrink-0" />
-              <span>Total: <strong className="text-foreground font-bold">${Number(order.total_amount).toFixed(2)}</strong></span>
-            </div>
+          <h3 className="mt-3 truncate text-xl font-bold tracking-tight">{order.event_title || 'Event'}</h3>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Calendar className="h-4 w-4" />
+              {formatDate(order.created_at)}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Receipt className="h-4 w-4" />
+              {formatCurrency(order.total_amount)}
+            </span>
           </div>
         </div>
 
-        {order.items && Array.isArray(order.items) && (
-          <div className="space-y-2 mt-2">
-            <Separator className="border-dashed" />
-            <span className="text-xs text-muted-foreground font-semibold block">
-              ASSIGNED SEATS
+        {!isPaid && (
+          <Button asChild className="h-9 shrink-0 rounded-lg">
+            <Link href={`/checkout/${order.id}`}>
+              Lanjut bayar
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        )}
+      </div>
+
+      <div className="p-5">
+        <div className="flex flex-wrap gap-2">
+          {(order.items || []).map((item, index) => (
+            <span key={`${item.seat_id}-${index}`} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs font-semibold">
+              <Ticket className="h-3.5 w-3.5 text-primary" />
+              Seat {item.row_label}{item.seat_number}
             </span>
-            <div className="flex flex-wrap gap-2">
-              {order.items.map((item, i) => (
-                <span
-                  key={i}
-                  className="px-2.5 py-1 text-xs font-bold bg-muted text-foreground border border-border rounded-lg flex items-center gap-1"
-                >
-                  <Ticket className="h-3 w-3 text-primary/80" />
-                  Seat {item.row_label}{item.seat_number}
-                </span>
-              ))}
-            </div>
+          ))}
+        </div>
+
+        {isPaid ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {(order.tickets || []).map((ticket) => (
+              <div key={ticket.id} className="flex items-center gap-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-md border border-border bg-white p-2">
+                  {ticketQr[ticket.id] ? (
+                    <Image src={ticketQr[ticket.id]} alt={ticket.ticket_code} width={88} height={88} className="h-full w-full object-contain" unoptimized />
+                  ) : (
+                    <QrCode className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">E-ticket</p>
+                  <p className="truncate font-mono text-sm font-bold">{ticket.ticket_code}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Issued {formatDate(ticket.issued_at)}</p>
+                </div>
+              </div>
+            ))}
+            {(!order.tickets || order.tickets.length === 0) && (
+              <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground sm:col-span-2">
+                Ticket sedang dibuat. Refresh halaman beberapa saat lagi.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+            E-ticket akan muncul setelah pembayaran dikonfirmasi dari simulator mobile.
           </div>
         )}
-      </CardContent>
-
-      {/* Decorative perforation separator for md+ */}
-      <div className="hidden md:flex flex-col justify-between items-center py-2 relative shrink-0">
-        <div className="w-6 h-6 bg-background border-r border-b border-border rounded-full -mt-5" />
-        <div className="h-full border-l border-dashed border-border my-1" />
-        <div className="w-6 h-6 bg-background border-r border-t border-border rounded-full -mb-5" />
       </div>
-
-      {/* Barcode side */}
-      <div className="bg-muted/30 px-8 py-6 flex flex-col justify-center items-center gap-2 md:w-48 border-t md:border-t-0 md:border-l border-border shrink-0">
-        {isPaid ? (
-          <>
-            <Barcode className="h-12 w-28 text-foreground/80 stroke-[1.5]" />
-            <span className="text-[10px] tracking-[0.25em] font-mono text-muted-foreground">
-              SECURE-PASS
-            </span>
-          </>
-        ) : (
-          <span className="text-xs text-amber-500 font-bold text-center">
-            Awaiting Payment Complete
-          </span>
-        )}
-      </div>
-    </Card>
+    </article>
   );
 }

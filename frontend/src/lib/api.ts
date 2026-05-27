@@ -120,6 +120,38 @@ export interface Order {
   status: string;
   total_amount: number;
   created_at?: string;
+  updated_at?: string;
   event_title?: string;
-  items?: { seat_id: string; price: number; row_label?: string; seat_number?: number }[];
+  items?: OrderItem[];
+  tickets?: Ticket[];
+}
+
+export interface OrderItem {
+  seat_id: string;
+  price: number;
+  row_label?: string;
+  seat_number?: number;
+}
+
+export interface Ticket {
+  id: string;
+  seat_id: string;
+  ticket_code: string;
+  qr_data: string;
+  issued_at?: string;
+}
+
+export interface Payment {
+  id: string;
+  order_id: string;
+  amount: number;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
+  payment_method: string;
+  transaction_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  order_status?: string;
+  total_amount?: number;
+  user_id?: string;
+  event_title?: string;
 }

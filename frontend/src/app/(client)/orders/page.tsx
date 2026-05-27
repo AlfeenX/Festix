@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { api, Order } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { TicketCard } from '@/components/TicketCard';
-import { Sparkles, CalendarDays, Loader2, Music, ChevronRight } from 'lucide-react';
+import { Sparkles, Loader2, Music, ChevronRight, TicketCheck } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,9 +29,13 @@ export default function OrdersPage() {
     setLoading(true);
     api<Order[]>(`/orders?user_id=${user.id}`)
       .then(setOrders)
-      .catch(console.error)
+      .catch((error) => showFlash({
+        type: 'error',
+        title: 'Gagal memuat order',
+        description: error instanceof Error ? error.message : 'Data order tidak bisa dimuat.',
+      }))
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, showFlash]);
 
   useEffect(() => {
     if (!successId || flashedSuccessId.current === successId) return;
@@ -46,17 +50,17 @@ export default function OrdersPage() {
   if (!user) {
     return (
       <div className="mx-auto max-w-md my-16 px-4">
-        <Card className="p-8 shadow-lg text-center space-y-4 py-8">
-          <div className="p-3.5 bg-primary/10 text-primary rounded-full w-fit mx-auto">
+        <Card className="rounded-lg p-8 text-center shadow-none">
+          <div className="mx-auto w-fit rounded-lg bg-primary/10 p-3.5 text-primary">
             <Music className="h-8 w-8" />
           </div>
-          <h2 className="text-2xl font-bold font-sora text-foreground">Please Sign In</h2>
-          <p className="text-sm text-muted-foreground font-sans leading-relaxed">
+          <h2 className="mt-4 text-2xl font-bold text-foreground">Please Sign In</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             You must be logged in to view your purchased tickets.
           </p>
           <Button
             asChild
-            className="w-full bg-vibe-gradient text-white border-0 font-extrabold h-11 rounded-full text-sm hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            className="mt-5 flex h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-bold"
           >
             <Link href="/login">
               Go to Login
@@ -69,26 +73,29 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10 space-y-8 min-h-screen">
-      
-      {/* Header */}
-      <div className="pb-6 border-b border-border text-left">
-        <h1 className="text-3xl font-extrabold font-sora text-foreground flex items-center gap-2">
-          <CalendarDays className="h-8 w-8 text-primary" />
-          My Orders & Tickets
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-xl mt-1">
-          Access your digital gate passes, check seat numbers, and track your payment receipts.
-        </p>
+    <div className="mx-auto min-h-screen max-w-5xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-4 border-b border-border pb-6 text-left sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
+            <TicketCheck className="h-8 w-8 text-primary" />
+            My Orders & Tickets
+          </h1>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            Ringkasan order, status pembayaran, dan e-ticket siap scan.
+          </p>
+        </div>
+        <Button asChild variant="outline" className="rounded-lg">
+          <Link href="/events">Cari event</Link>
+        </Button>
       </div>
 
       {successId && (
-        <Alert className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm animate-bounce">
+        <Alert className="flex items-center gap-3.5 rounded-lg border-emerald-500/25 bg-emerald-500/10 p-4 text-emerald-700 dark:text-emerald-300">
           <Sparkles className="h-5 w-5 text-emerald-500 shrink-0" />
           <div>
-            <AlertTitle className="font-bold text-emerald-700 dark:text-emerald-300">Payment Complete!</AlertTitle>
+            <AlertTitle className="font-bold">Payment Complete</AlertTitle>
             <AlertDescription className="text-sm font-medium">
-              Your secure digital tickets have been generated. Check in below.
+              E-ticket sudah dibuat dan bisa dicek di daftar order.
             </AlertDescription>
           </div>
         </Alert>
@@ -100,17 +107,17 @@ export default function OrdersPage() {
           <p className="text-sm text-muted-foreground">Retrieving order database...</p>
         </div>
       ) : orders.length === 0 ? (
-        <Card className="p-12 text-center max-w-md mx-auto space-y-4 shadow-md border-border">
-          <div className="p-3.5 bg-muted text-muted-foreground/50 rounded-full w-fit mx-auto">
+        <Card className="mx-auto max-w-md rounded-lg border-border p-12 text-center shadow-none">
+          <div className="mx-auto w-fit rounded-lg bg-muted p-3.5 text-muted-foreground/60">
             <Music className="h-8 w-8" />
           </div>
-          <h3 className="text-lg font-bold font-sora text-foreground">No Orders Yet</h3>
-          <p className="text-sm text-muted-foreground font-sans leading-relaxed">
+          <h3 className="mt-4 text-lg font-bold text-foreground">No Orders Yet</h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             You haven't bought tickets to any shows yet.
           </p>
           <Button
             asChild
-            className="w-full bg-vibe-gradient text-white border-0 font-extrabold h-11 rounded-full text-sm hover:shadow-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
+            className="mt-5 flex h-11 w-full cursor-pointer items-center justify-center gap-1 rounded-lg text-sm font-bold"
           >
             <Link href="/events">
               Find Live Shows

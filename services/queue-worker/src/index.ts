@@ -27,6 +27,12 @@ consumeQueue('ticket.generation', async (msg) => {
   );
 
   for (const item of items.rows) {
+    const existing = await query('SELECT id FROM tickets WHERE order_id = $1 AND seat_id = $2', [orderId, item.seat_id]);
+    if (existing.rows.length > 0) {
+      await query("UPDATE seats SET status = 'SOLD' WHERE id = $1", [item.seat_id]);
+      continue;
+    }
+
     const ticketCode = generateTicketCode();
     const qrData = JSON.stringify({
       ticketCode,

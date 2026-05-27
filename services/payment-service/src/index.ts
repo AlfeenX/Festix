@@ -15,19 +15,78 @@ const paySchema = z.object({
 
 const { app, start } = createServiceApp({ name: 'payment-service', port: PORT });
 
+function generateTicketCode(): string {
+  return `FST-${uuidv4().slice(0, 8).toUpperCase()}`;
+}
+
+async function generateTicketsForOrder(orderId: string) {
+  const order = await query('SELECT * FROM orders WHERE id = $1', [orderId]);
+  if (order.rows.length === 0) return;
+
+  const orderData = order.rows[0];
+  const items = await query(
+    `SELECT oi.*, s.row_label, s.seat_number
+     FROM order_items oi
+     JOIN seats s ON s.id = oi.seat_id
+     WHERE oi.order_id = $1`,
+    [orderId]
+  );
+
+  for (const item of items.rows) {
+    const existing = await query('SELECT id FROM tickets WHERE order_id = $1 AND seat_id = $2', [orderId, item.seat_id]);
+    if (existing.rows.length > 0) {
+      await query("UPDATE seats SET status = 'SOLD' WHERE id = $1", [item.seat_id]);
+      continue;
+    }
+
+    const ticketCode = generateTicketCode();
+    const qrData = JSON.stringify({
+      ticketCode,
+      orderId,
+      seatId: item.seat_id,
+      eventId: orderData.event_id,
+      row: item.row_label,
+      seat: item.seat_number,
+    });
+
+    await query(
+      `INSERT INTO tickets (order_id, seat_id, user_id, event_id, ticket_code, qr_data)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [orderId, item.seat_id, orderData.user_id, orderData.event_id, ticketCode, qrData]
+    );
+    await query("UPDATE seats SET status = 'SOLD' WHERE id = $1", [item.seat_id]);
+  }
+}
+
+async function getPaymentSession(paymentId: string) {
+  return query(
+    `SELECT p.*, o.status as order_status, o.total_amount, o.user_id, e.title as event_title
+     FROM payments p
+     JOIN orders o ON o.id = p.order_id
+     JOIN events e ON e.id = o.event_id
+     WHERE p.id = $1`,
+    [paymentId]
+  );
+}
+
 app.post('/pay', asyncHandler(async (req, res) => {
   const body = paySchema.parse(req.body);
   const idempotencyKey = body.idempotency_key || uuidv4();
 
   const existing = await query('SELECT * FROM payments WHERE idempotency_key = $1', [idempotencyKey]);
   if (existing.rows.length > 0) {
-    res.json({ payment: existing.rows[0], duplicate: true });
+    res.json({ payment: existing.rows[0], duplicate: true, success: existing.rows[0].status === 'SUCCESS' });
     return;
   }
 
   const order = await query('SELECT * FROM orders WHERE id = $1', [body.order_id]);
   if (order.rows.length === 0) {
     res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+
+  if (Number(order.rows[0].total_amount) !== Number(body.amount)) {
+    res.status(400).json({ error: 'Payment amount does not match order total' });
     return;
   }
 
@@ -45,34 +104,70 @@ app.post('/pay', asyncHandler(async (req, res) => {
     correlationId: body.order_id,
   });
 
-  const success = Math.random() > FAILURE_RATE;
+  res.status(201).json({
+    payment,
+    success: false,
+    payment_url: `/pay/${payment.id}`,
+  });
+}));
+
+app.get('/session/:id', asyncHandler(async (req, res) => {
+  const result = await getPaymentSession(String(req.params.id));
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Payment not found' });
+    return;
+  }
+  res.json(result.rows[0]);
+}));
+
+app.post('/:id/confirm', asyncHandler(async (req, res) => {
+  const paymentId = String(req.params.id);
+  const result = await getPaymentSession(paymentId);
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Payment not found' });
+    return;
+  }
+
+  const payment = result.rows[0];
+  if (payment.status === 'SUCCESS') {
+    res.json({ payment, success: true, duplicate: true });
+    return;
+  }
+
+  if (payment.status !== 'PENDING') {
+    res.status(409).json({ error: `Payment is already ${payment.status}` });
+    return;
+  }
+
+  const success = true;
   const transactionId = `TXN-${uuidv4().slice(0, 8).toUpperCase()}`;
 
   if (success) {
     await query(
       `UPDATE payments SET status = 'SUCCESS', transaction_id = $1, updated_at = NOW() WHERE id = $2`,
-      [transactionId, payment.id]
+      [transactionId, paymentId]
     );
-    await query("UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE id = $1", [body.order_id]);
+    await query("UPDATE orders SET status = 'PAID', updated_at = NOW() WHERE id = $1", [payment.order_id]);
+    await generateTicketsForOrder(payment.order_id);
 
     await publishEvent('ticket.generation', {
       event: DOMAIN_EVENTS.PAYMENT_SUCCESS,
-      payload: { paymentId: payment.id, orderId: body.order_id, transactionId },
+      payload: { paymentId, orderId: payment.order_id, transactionId },
       timestamp: new Date().toISOString(),
-      correlationId: body.order_id,
+      correlationId: payment.order_id,
     });
   } else {
-    await query("UPDATE payments SET status = 'FAILED', updated_at = NOW() WHERE id = $1", [payment.id]);
-    await query("UPDATE orders SET status = 'FAILED', updated_at = NOW() WHERE id = $1", [body.order_id]);
+    await query("UPDATE payments SET status = 'FAILED', updated_at = NOW() WHERE id = $1", [paymentId]);
+    await query("UPDATE orders SET status = 'FAILED', updated_at = NOW() WHERE id = $1", [payment.order_id]);
 
     await publishEvent('notification.send', {
       event: DOMAIN_EVENTS.PAYMENT_FAILED,
-      payload: { paymentId: payment.id, orderId: body.order_id },
+      payload: { paymentId, orderId: payment.order_id },
       timestamp: new Date().toISOString(),
     });
   }
 
-  const updated = await query('SELECT * FROM payments WHERE id = $1', [payment.id]);
+  const updated = await query('SELECT * FROM payments WHERE id = $1', [paymentId]);
   res.json({
     payment: updated.rows[0],
     success,

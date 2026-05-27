@@ -103,6 +103,8 @@ app.use('/api/venues', proxy(SERVICES.event, (_path, req) => req.originalUrl.rep
 app.use('/api/checkout', authMiddleware(['USER']), proxy(SERVICES.order, (_path, req) => req.originalUrl.replace(/^\/api\/checkout/, '/checkout')));
 app.use('/api/orders', authMiddleware(), proxy(SERVICES.order, (_path, req) => req.originalUrl.replace(/^\/api\/orders/, '/orders')));
 app.post('/api/payments/pay', authMiddleware(['USER']), proxy(SERVICES.payment, (_path, req) => req.originalUrl.replace(/^\/api\/payments/, '')));
+app.get('/api/payments/session/:id', proxy(SERVICES.payment, (_path, req) => req.originalUrl.replace(/^\/api\/payments/, '')));
+app.post('/api/payments/:id/confirm', proxy(SERVICES.payment, (_path, req) => req.originalUrl.replace(/^\/api\/payments/, '')));
 app.use('/api/payments', authMiddleware(['USER']), proxy(SERVICES.payment, (_path, req) => req.originalUrl.replace(/^\/api\/payments/, '')));
 app.use('/api/notifications', authMiddleware(), proxy(SERVICES.notification, (_path, req) => req.originalUrl.replace(/^\/api\/notifications/, '/notifications')));
 

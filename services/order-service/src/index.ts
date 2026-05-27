@@ -77,10 +77,30 @@ app.get('/orders', asyncHandler(async (req, res) => {
   }
   const result = await query(
     `SELECT o.*, e.title as event_title,
-      json_agg(json_build_object('seat_id', oi.seat_id, 'price', oi.price)) as items
+      COALESCE(
+        json_agg(DISTINCT jsonb_build_object(
+          'seat_id', oi.seat_id,
+          'price', oi.price,
+          'row_label', s.row_label,
+          'seat_number', s.seat_number
+        )) FILTER (WHERE oi.id IS NOT NULL),
+        '[]'
+      ) as items,
+      COALESCE(
+        json_agg(DISTINCT jsonb_build_object(
+          'id', t.id,
+          'seat_id', t.seat_id,
+          'ticket_code', t.ticket_code,
+          'qr_data', t.qr_data,
+          'issued_at', t.issued_at
+        )) FILTER (WHERE t.id IS NOT NULL),
+        '[]'
+      ) as tickets
      FROM orders o
      JOIN events e ON o.event_id = e.id
      LEFT JOIN order_items oi ON oi.order_id = o.id
+     LEFT JOIN seats s ON s.id = oi.seat_id
+     LEFT JOIN tickets t ON t.order_id = o.id
      WHERE o.user_id = $1
      GROUP BY o.id, e.title
      ORDER BY o.created_at DESC`,
@@ -95,7 +115,11 @@ app.get('/orders/:id', asyncHandler(async (req, res) => {
       (SELECT json_agg(json_build_object(
         'seat_id', oi.seat_id, 'price', oi.price,
         'row_label', s.row_label, 'seat_number', s.seat_number
-      )) FROM order_items oi JOIN seats s ON s.id = oi.seat_id WHERE oi.order_id = o.id) as items
+      )) FROM order_items oi JOIN seats s ON s.id = oi.seat_id WHERE oi.order_id = o.id) as items,
+      (SELECT json_agg(json_build_object(
+        'id', t.id, 'seat_id', t.seat_id, 'ticket_code', t.ticket_code,
+        'qr_data', t.qr_data, 'issued_at', t.issued_at
+      )) FROM tickets t WHERE t.order_id = o.id) as tickets
      FROM orders o JOIN events e ON o.event_id = e.id WHERE o.id = $1`,
     [req.params.id]
   );
