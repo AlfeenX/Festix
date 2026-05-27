@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Bell,
+  BellRing,
   ChevronDown,
   LogOut,
   Menu,
@@ -30,7 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { api, Event, Order, User } from '@/lib/api';
+import { api, Event, Order, User, Venue } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { getAdminNavGroups, type AdminNavItem } from './_config/navigation';
 
@@ -43,23 +44,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [badges, setBadges] = useState<MenuBadges>({});
+  const [viewedNotificationSignature, setViewedNotificationSignature] = useState('');
 
   const navGroups = useMemo(() => getAdminNavGroups(user?.role), [user?.role]);
+  const notifications = useMemo(() => {
+    return navGroups
+      .flatMap((group) => group.items)
+      .map((item) => ({
+        ...item,
+        count: badges[item.id] || 0,
+      }))
+      .filter((item) => item.count > 0 && ['events', 'orders', 'users'].includes(item.id));
+  }, [badges, navGroups]);
+  const notificationSignature = notifications.map((item) => `${item.id}:${item.count}`).join('|');
+  const hasUnreadNotifications = notifications.length > 0 && notificationSignature !== viewedNotificationSignature;
+  const NotificationIcon = hasUnreadNotifications ? BellRing : Bell;
 
   useEffect(() => {
     if (!user) return;
 
     Promise.allSettled([
       api<Event[]>('/events?refresh=1'),
+      api<Venue[]>('/venues'),
       api<Order[]>('/admin/orders?refresh=1'),
       user.role === 'SUPER_ADMIN' ? api<User[]>('/admin/users?refresh=1') : Promise.resolve([]),
-    ]).then(([eventsResult, ordersResult, usersResult]) => {
+    ]).then(([eventsResult, venuesResult, ordersResult, usersResult]) => {
       const nextBadges: MenuBadges = {};
       if (eventsResult.status === 'fulfilled') nextBadges.events = eventsResult.value.length;
+      if (venuesResult.status === 'fulfilled') nextBadges.venues = venuesResult.value.length;
       if (ordersResult.status === 'fulfilled') nextBadges.orders = ordersResult.value.length;
       if (usersResult.status === 'fulfilled') nextBadges.users = usersResult.value.length;
       setBadges(nextBadges);
     });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setViewedNotificationSignature(localStorage.getItem(`festix-admin-notifications:${user.id}`) || '');
   }, [user]);
 
   const checkActive = (item: AdminNavItem) => {
@@ -78,6 +99,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const handleLogout = () => {
     logout();
     router.push('/login');
+  };
+
+  const markNotificationsViewed = (open: boolean) => {
+    if (!open || !user || !notificationSignature) return;
+    localStorage.setItem(`festix-admin-notifications:${user.id}`, notificationSignature);
+    setViewedNotificationSignature(notificationSignature);
   };
 
   const renderNavItem = (item: AdminNavItem, mobile = false) => {
@@ -253,9 +280,48 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
 
               <div className="flex items-center gap-1.5">
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg">
-                  <Bell className="h-4 w-4" />
-                </Button>
+                <DropdownMenu onOpenChange={markNotificationsViewed}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg" aria-label="Notifikasi">
+                      <NotificationIcon className="h-4 w-4" />
+                      {hasUnreadNotifications && (
+                        <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-background" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80 p-2">
+                    <DropdownMenuLabel className="px-2 py-1.5">
+                      <span className="block text-xs font-semibold">Notifikasi</span>
+                      <span className="block text-[11px] font-normal text-muted-foreground">
+                        {notifications.length ? 'Ringkasan data operasional terbaru.' : 'Belum ada notifikasi baru.'}
+                      </span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {notifications.length ? (
+                      notifications.map((notification) => {
+                        const Icon = notification.icon;
+                        return (
+                          <DropdownMenuItem key={notification.id} asChild className="cursor-pointer p-0">
+                            <Link href={notification.href} className="flex w-full items-start gap-3 rounded-md px-2 py-2">
+                              <span className="mt-0.5 rounded-md bg-primary/10 p-1.5 text-primary">
+                                <Icon className="h-3.5 w-3.5" />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold">{notification.label}</span>
+                                <span className="block text-[11px] text-muted-foreground">{notification.count} data tersedia untuk ditinjau.</span>
+                              </span>
+                              <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px]">
+                                {notification.count}
+                              </Badge>
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })
+                    ) : (
+                      <div className="px-2 py-4 text-center text-xs text-muted-foreground">Tidak ada item yang perlu ditinjau.</div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <ThemeToggle />
                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" asChild>
                   <Link href="/events">

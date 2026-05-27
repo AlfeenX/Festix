@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Building2,
   CalendarDays,
   ClipboardList,
   LineChart,
@@ -9,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export type AdminNavItem = {
-  id: 'overview' | 'events' | 'orders' | 'seating' | 'reports' | 'users';
+  id: 'overview' | 'events' | 'venues' | 'orders' | 'seating' | 'reports' | 'users';
   label: string;
   href: string;
   icon: LucideIcon;
@@ -41,6 +42,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         href: '/admin/events',
         icon: CalendarDays,
         description: 'Kelola jadwal, venue, dan publikasi event',
+      },
+      {
+        id: 'venues',
+        label: 'Venues',
+        href: '/admin/venues',
+        icon: Building2,
+        description: 'Kelola lokasi dan kapasitas venue',
       },
       {
         id: 'orders',

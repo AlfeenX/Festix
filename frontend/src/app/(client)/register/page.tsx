@@ -10,9 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useFlash } from '@/components/FlashProvider';
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const { showFlash } = useFlash();
   const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '', fullName: '' });
   const [error, setError] = useState('');
@@ -24,9 +26,12 @@ export default function RegisterPage() {
     setError('');
     try {
       await register(form.email, form.password, form.fullName);
+      showFlash({ type: 'success', title: 'Registrasi berhasil', description: 'Akun sudah dibuat dan siap digunakan.' });
       router.push('/events');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const description = err instanceof Error ? err.message : 'Registration failed';
+      setError(description);
+      showFlash({ type: 'error', title: 'Registrasi gagal', description });
     } finally {
       setForm((prev) => ({ ...prev, password: '' }));
       setLoading(false);

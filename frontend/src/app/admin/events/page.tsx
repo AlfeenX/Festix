@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table';
 import { api, Event, Venue } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useFlash } from '@/components/FlashProvider';
 import { formatDateTime, getEventStatus } from '../_config/format';
 import { emptyEventForm, EventForm, EventFormFields, toDateTimeLocal, toEventPayload } from '../_components/event-form-fields';
 
@@ -42,6 +43,7 @@ function toEventForm(event?: Event): EventForm {
 
 export default function AdminEventsPage() {
   const { user } = useAuth();
+  const { showFlash } = useFlash();
   const [events, setEvents] = useState<Event[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [search, setSearch] = useState('');
@@ -52,14 +54,24 @@ export default function AdminEventsPage() {
   const [message, setMessage] = useState('');
 
   const loadEvents = () => {
-    api<Event[]>('/events?refresh=1').then(setEvents).catch(console.error);
+    api<Event[]>('/events?refresh=1')
+      .then(setEvents)
+      .catch((error) => showFlash({
+        type: 'error',
+        title: 'Gagal memuat event',
+        description: error instanceof Error ? error.message : 'Data event tidak bisa dimuat.',
+      }));
   };
 
   useEffect(() => {
     if (!user) return;
     loadEvents();
-    api<Venue[]>('/venues').then(setVenues).catch(console.error);
-  }, [user]);
+    api<Venue[]>('/venues').then(setVenues).catch((error) => showFlash({
+      type: 'error',
+      title: 'Gagal memuat venue',
+      description: error instanceof Error ? error.message : 'Data venue tidak bisa dimuat.',
+    }));
+  }, [user, showFlash]);
 
   const filteredEvents = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -108,9 +120,16 @@ export default function AdminEventsPage() {
         });
       }
       setDialogOpen(false);
+      showFlash({
+        type: 'success',
+        title: editingEvent ? 'Event diperbarui' : 'Event ditambahkan',
+        description: 'Perubahan event berhasil disimpan.',
+      });
       loadEvents();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Gagal menyimpan event.');
+      const description = error instanceof Error ? error.message : 'Gagal menyimpan event.';
+      setMessage(description);
+      showFlash({ type: 'error', title: 'Gagal menyimpan event', description });
     } finally {
       setSaving(false);
     }
@@ -122,9 +141,18 @@ export default function AdminEventsPage() {
 
     try {
       await api(`/admin/events/${event.id}`, { method: 'DELETE' });
+      showFlash({
+        type: 'success',
+        title: 'Event dihapus',
+        description: `"${event.title}" berhasil dihapus.`,
+      });
       loadEvents();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Gagal menghapus event.');
+      showFlash({
+        type: 'error',
+        title: 'Gagal menghapus event',
+        description: error instanceof Error ? error.message : 'Event tidak bisa dihapus.',
+      });
     }
   };
 

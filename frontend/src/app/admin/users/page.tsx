@@ -32,12 +32,18 @@ import {
 } from '@/components/ui/table';
 import { api, User } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useFlash } from '@/components/FlashProvider';
 
 type UserForm = {
   full_name: string;
   email: string;
   password: string;
   role: 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+};
+
+type UserApiRecord = User & {
+  name?: string;
+  fullName?: string;
 };
 
 const emptyUserForm: UserForm = {
@@ -47,8 +53,22 @@ const emptyUserForm: UserForm = {
   role: 'USER',
 };
 
+function normalizeUser(user: UserApiRecord): User {
+  const values = [user.full_name, user.fullName, user.name].filter(Boolean) as string[];
+  const isEmailValue = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const email = user.email || values.find(isEmailValue) || '';
+  const fullName = values.find((value) => value !== email && !isEmailValue(value)) || '';
+
+  return {
+    ...user,
+    email,
+    full_name: fullName,
+  };
+}
+
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
+  const { showFlash } = useFlash();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -61,12 +81,18 @@ export default function AdminUsersPage() {
 
   const loadUsers = () => {
     if (!canManageUsers) return;
-    api<User[]>('/admin/users?refresh=1').then(setUsers).catch(console.error);
+    api<UserApiRecord[]>('/admin/users?refresh=1')
+      .then((data) => setUsers(data.map(normalizeUser)))
+      .catch((error) => showFlash({
+        type: 'error',
+        title: 'Gagal memuat user',
+        description: error instanceof Error ? error.message : 'Data user tidak bisa dimuat.',
+      }));
   };
 
   useEffect(() => {
     loadUsers();
-  }, [canManageUsers]);
+  }, [canManageUsers, showFlash]);
 
   const filteredUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -86,12 +112,13 @@ export default function AdminUsersPage() {
   };
 
   const openEditDialog = (user: User) => {
+    const normalizedUser = normalizeUser(user);
     setEditingUser(user);
     setForm({
-      full_name: user.full_name || '',
-      email: user.email || '',
+      full_name: normalizedUser.full_name,
+      email: normalizedUser.email,
       password: '',
-      role: user.role as UserForm['role'],
+      role: normalizedUser.role as UserForm['role'],
     });
     setMessage('');
     setDialogOpen(true);
@@ -126,9 +153,16 @@ export default function AdminUsersPage() {
         });
       }
       setDialogOpen(false);
+      showFlash({
+        type: 'success',
+        title: editingUser ? 'User diperbarui' : 'User ditambahkan',
+        description: 'Data user berhasil disimpan.',
+      });
       loadUsers();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Gagal menyimpan user.');
+      const description = error instanceof Error ? error.message : 'Gagal menyimpan user.';
+      setMessage(description);
+      showFlash({ type: 'error', title: 'Gagal menyimpan user', description });
     } finally {
       setSaving(false);
     }
@@ -136,7 +170,11 @@ export default function AdminUsersPage() {
 
   const deleteUser = async (user: User) => {
     if (user.id === currentUser?.id) {
-      alert('Akun yang sedang aktif tidak bisa dihapus dari halaman ini.');
+      showFlash({
+        type: 'error',
+        title: 'User tidak bisa dihapus',
+        description: 'Akun yang sedang aktif tidak bisa dihapus dari halaman ini.',
+      });
       return;
     }
 
@@ -145,9 +183,18 @@ export default function AdminUsersPage() {
 
     try {
       await api(`/admin/users/${user.id}`, { method: 'DELETE' });
+      showFlash({
+        type: 'success',
+        title: 'User dihapus',
+        description: `${user.full_name || user.email} berhasil dihapus.`,
+      });
       loadUsers();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Gagal menghapus user.');
+      showFlash({
+        type: 'error',
+        title: 'Gagal menghapus user',
+        description: error instanceof Error ? error.message : 'User tidak bisa dihapus.',
+      });
     }
   };
 

@@ -22,6 +22,14 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const adminUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[a-z]/, 'Must contain lowercase').regex(/[0-9]/, 'Must contain number').optional(),
+  full_name: z.string().min(2),
+  role: z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']),
+});
+
 function signAccess(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_EXPIRES } as SignOptions);
 }
@@ -35,6 +43,18 @@ function verifyToken(token: string): JwtPayload {
 }
 
 const { app, start } = createServiceApp({ name: 'auth-service', port: PORT });
+
+function isSuperAdmin(req: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return req.headers['x-user-role'] === 'SUPER_ADMIN';
+}
+
+function requireSuperAdmin(req: { headers: Record<string, string | string[] | undefined> }, res: { status: (code: number) => { json: (body: unknown) => void } }): boolean {
+  if (!isSuperAdmin(req)) {
+    res.status(403).json({ error: 'SUPER_ADMIN access required' });
+    return false;
+  }
+  return true;
+}
 
 app.post('/register', asyncHandler(async (req, res) => {
   const body = registerSchema.parse(req.body);
@@ -165,6 +185,90 @@ app.get('/users/:id', asyncHandler(async (req, res) => {
     return;
   }
   res.json(result.rows[0]);
+}));
+
+app.get('/admin/users', asyncHandler(async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+
+  const result = await query(
+    `SELECT u.id, u.email, u.full_name, r.name as role, u.is_active, u.created_at, u.updated_at
+     FROM users u
+     JOIN roles r ON u.role_id = r.id
+     ORDER BY u.created_at DESC`
+  );
+
+  res.json(result.rows);
+}));
+
+app.post('/admin/users', asyncHandler(async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+
+  const body = adminUserSchema.required({ password: true }).parse(req.body);
+  const hash = await bcrypt.hash(body.password, 12);
+  const result = await query(
+    `INSERT INTO users (email, password_hash, full_name, role_id)
+     SELECT $1, $2, $3, id FROM roles WHERE name = $4
+     RETURNING id, email, full_name,
+       (SELECT name FROM roles WHERE id = users.role_id) as role,
+       is_active, created_at, updated_at`,
+    [body.email, hash, body.full_name, body.role]
+  );
+
+  res.status(201).json(result.rows[0]);
+}));
+
+app.put('/admin/users/:id', asyncHandler(async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+
+  const body = adminUserSchema.parse(req.body);
+  const params = body.password
+    ? [req.params.id, body.email, body.full_name, body.role, await bcrypt.hash(body.password, 12)]
+    : [req.params.id, body.email, body.full_name, body.role];
+  const passwordUpdate = body.password ? ', password_hash = $5' : '';
+
+  const result = await query(
+    `UPDATE users
+     SET email = $2,
+         full_name = $3,
+         role_id = (SELECT id FROM roles WHERE name = $4),
+         is_active = true,
+         updated_at = NOW()
+         ${passwordUpdate}
+     WHERE id = $1
+     RETURNING id, email, full_name,
+       (SELECT name FROM roles WHERE id = users.role_id) as role,
+       is_active, created_at, updated_at`,
+    params
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+
+  res.json(result.rows[0]);
+}));
+
+app.delete('/admin/users/:id', asyncHandler(async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+
+  if (req.params.id === req.headers['x-user-id']) {
+    res.status(400).json({ error: 'Cannot delete the active user' });
+    return;
+  }
+
+  const result = await query(
+    `DELETE FROM users WHERE id = $1
+     RETURNING id, email, full_name`,
+    [req.params.id]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+
+  res.json({ message: 'User deleted', user: result.rows[0] });
 }));
 
 app.use(errorHandler);

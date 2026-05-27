@@ -8,6 +8,19 @@ async function seed() {
     [adminHash]
   );
 
+  const superAdminHash = await bcrypt.hash('SuperAdmin123!', 12);
+  await query(
+    `INSERT INTO users (email, password_hash, full_name, role_id)
+     SELECT $1, $2, $3, id FROM roles WHERE name = 'SUPER_ADMIN'
+     ON CONFLICT (email) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       full_name = EXCLUDED.full_name,
+       role_id = EXCLUDED.role_id,
+       is_active = true,
+       updated_at = NOW()`,
+    ['superadmin@festix.com', superAdminHash, 'Festix Super Admin']
+  );
+
   const eventId = 'b0000000-0000-0000-0000-000000000001';
   const existing = await query('SELECT COUNT(*) as cnt FROM seats WHERE event_id = $1', [eventId]);
   if (parseInt(existing.rows[0].cnt, 10) === 0) {
@@ -31,6 +44,7 @@ async function seed() {
   }
 
   console.log('Seed complete. Admin: admin@festix.com / Admin123!');
+  console.log('Seed complete. Super Admin: superadmin@festix.com / SuperAdmin123!');
   await closePool();
 }
 

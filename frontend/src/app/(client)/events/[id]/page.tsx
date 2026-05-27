@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useFlash } from '@/components/FlashProvider';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3003';
 
@@ -18,6 +19,7 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { showFlash } = useFlash();
   const [event, setEvent] = useState<Event | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -64,8 +66,15 @@ export default function EventDetailPage() {
         { method: 'POST', body: JSON.stringify({ user_id: user.id }) }
       );
       setQueueStatus(res.status === 'admitted' ? 'admitted' : `waiting (#${res.position})`);
+      showFlash({
+        type: 'success',
+        title: res.status === 'admitted' ? 'Antrean aktif' : 'Masuk antrean',
+        description: res.status === 'admitted' ? 'Anda bisa melanjutkan pemesanan.' : `Posisi antrean Anda #${res.position}.`,
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to join queue');
+      const description = e instanceof Error ? e.message : 'Failed to join queue';
+      setError(description);
+      showFlash({ type: 'error', title: 'Gagal masuk antrean', description });
     }
   };
 
@@ -104,12 +113,20 @@ export default function EventDetailPage() {
       });
 
       if (payment.success) {
+        showFlash({
+          type: 'success',
+          title: 'Pembayaran berhasil',
+          description: 'Tiket digital Anda sedang disiapkan.',
+        });
         router.push(`/orders?success=${order.order.id}`);
       } else {
         setError('Payment failed. Please try again.');
+        showFlash({ type: 'error', title: 'Pembayaran gagal', description: 'Payment failed. Please try again.' });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Checkout failed');
+      const description = e instanceof Error ? e.message : 'Checkout failed';
+      setError(description);
+      showFlash({ type: 'error', title: 'Checkout gagal', description });
     } finally {
       setLoading(false);
     }

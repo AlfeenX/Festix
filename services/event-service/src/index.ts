@@ -26,6 +26,13 @@ const eventSchema = z.object({
   is_published: z.boolean().optional(),
 });
 
+const venueSchema = z.object({
+  name: z.string().min(1),
+  address: z.string().optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  capacity: z.number().int().min(0).optional(),
+});
+
 const seatGenSchema = z.object({
   rows: z.number().min(1).max(50),
   seats_per_row: z.number().min(1).max(100),
@@ -190,13 +197,61 @@ app.get('/venues', asyncHandler(async (_req, res) => {
   res.json(result.rows);
 }));
 
-app.post('/venues', asyncHandler(async (req, res) => {
-  const { name, address, city, capacity } = req.body;
+app.post('/admin/venues', asyncHandler(async (req, res) => {
+  const body = venueSchema.parse(req.body);
   const result = await query(
     'INSERT INTO venues (name, address, city, capacity) VALUES ($1, $2, $3, $4) RETURNING *',
-    [name, address, city, capacity]
+    [body.name, body.address || null, body.city || null, body.capacity ?? 0]
   );
   res.status(201).json(result.rows[0]);
+}));
+
+app.put('/admin/venues/:id', asyncHandler(async (req, res) => {
+  const body = venueSchema.partial().parse(req.body);
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  let i = 1;
+
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) {
+      fields.push(`${key} = $${i++}`);
+      values.push(value === '' ? null : value);
+    }
+  }
+
+  if (fields.length === 0) {
+    res.status(400).json({ error: 'No fields to update' });
+    return;
+  }
+
+  values.push(String(req.params.id));
+  const result = await query(
+    `UPDATE venues SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Venue not found' });
+    return;
+  }
+
+  res.json(result.rows[0]);
+}));
+
+app.delete('/admin/venues/:id', asyncHandler(async (req, res) => {
+  const usage = await query('SELECT COUNT(*) as count FROM events WHERE venue_id = $1', [String(req.params.id)]);
+  if (parseInt(usage.rows[0].count, 10) > 0) {
+    res.status(409).json({ error: 'Venue is still used by one or more events' });
+    return;
+  }
+
+  const result = await query('DELETE FROM venues WHERE id = $1 RETURNING *', [String(req.params.id)]);
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'Venue not found' });
+    return;
+  }
+
+  res.json({ message: 'Venue deleted', venue: result.rows[0] });
 }));
 
 app.get('/admin/stats', asyncHandler(async (_req, res) => {

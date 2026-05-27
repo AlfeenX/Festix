@@ -9,9 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useFlash } from '@/components/FlashProvider';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { showFlash } = useFlash();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,6 +26,7 @@ export default function LoginPage() {
     setError('');
     try {
       await login(email, password);
+      showFlash({ type: 'success', title: 'Login berhasil', description: 'Sesi akun sudah aktif.' });
       const stored = localStorage.getItem('user');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -34,7 +37,9 @@ export default function LoginPage() {
       }
       router.push('/events');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const description = err instanceof Error ? err.message : 'Login failed';
+      setError(description);
+      showFlash({ type: 'error', title: 'Login gagal', description });
     } finally {
       setLoading(false);
     }

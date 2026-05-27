@@ -5,6 +5,7 @@ import { Armchair, CheckCircle2, Cpu, Loader2, RefreshCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useFlash } from '@/components/FlashProvider';
 import { api, Event, Seat } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '../_config/format';
 
@@ -24,6 +25,7 @@ const seatConfig = {
 };
 
 export default function AdminSeatingPage() {
+  const { showFlash } = useFlash();
   const [events, setEvents] = useState<Event[]>([]);
   const [seatStatus, setSeatStatus] = useState<Record<string, SeatStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,11 @@ export default function AdminSeatingPage() {
 
       setSeatStatus(Object.fromEntries(statusEntries));
     } catch (error) {
-      console.error(error);
+      showFlash({
+        type: 'error',
+        title: 'Gagal memuat seating',
+        description: error instanceof Error ? error.message : 'Data seating tidak bisa dimuat.',
+      });
     } finally {
       setLoading(false);
     }
@@ -80,8 +86,17 @@ export default function AdminSeatingPage() {
         body: JSON.stringify(seatConfig),
       });
       await loadData();
+      showFlash({
+        type: 'success',
+        title: 'Seating berhasil dibuat',
+        description: 'Layout kursi event sudah digenerate.',
+      });
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Gagal generate seating.');
+      showFlash({
+        type: 'error',
+        title: 'Gagal generate seating',
+        description: error instanceof Error ? error.message : 'Layout kursi tidak bisa dibuat.',
+      });
     } finally {
       setGenerating(null);
     }

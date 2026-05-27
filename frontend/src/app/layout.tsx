@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { FlashProvider } from '@/components/FlashProvider';
 import { AuthProvider } from '@/lib/auth';
 import './globals.css';
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased font-inter bg-background text-foreground min-h-screen flex flex-col transition-colors duration-300">
         <AuthProvider>
           <TooltipProvider>
-            {children}
+            <FlashProvider>{children}</FlashProvider>
           </TooltipProvider>
         </AuthProvider>
       </body>

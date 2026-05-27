@@ -111,10 +111,14 @@ const rewriteAdminEvents = (_path: string, req: Request) => req.originalUrl.repl
 const rewriteAdminStats = (_path: string, req: Request) => req.originalUrl.replace(/^\/api\/admin\/stats/, '/admin/stats');
 const rewriteAdminOrders = (_path: string, req: Request) => req.originalUrl.replace(/^\/api\/admin\/orders/, '/admin/orders');
 const rewriteAdminPayments = (_path: string, req: Request) => req.originalUrl.replace(/^\/api\/admin\/payments/, '/admin/payments');
+const rewriteAdminUsers = (_path: string, req: Request) => req.originalUrl.replace(/^\/api\/admin\/users/, '/admin/users');
+const rewriteAdminVenues = (_path: string, req: Request) => req.originalUrl.replace(/^\/api\/admin\/venues/, '/admin/venues');
 app.use('/api/admin/events', authMiddleware(['ADMIN', 'SUPER_ADMIN']), proxy(SERVICES.event, rewriteAdminEvents));
 app.use('/api/admin/stats', authMiddleware(['ADMIN', 'SUPER_ADMIN']), proxy(SERVICES.event, rewriteAdminStats));
 app.use('/api/admin/orders', authMiddleware(['ADMIN', 'SUPER_ADMIN']), proxy(SERVICES.order, rewriteAdminOrders));
 app.use('/api/admin/payments', authMiddleware(['ADMIN', 'SUPER_ADMIN']), proxy(SERVICES.payment, rewriteAdminPayments));
+app.use('/api/admin/users', authMiddleware(['SUPER_ADMIN']), proxy(SERVICES.auth, rewriteAdminUsers));
+app.use('/api/admin/venues', authMiddleware(['ADMIN', 'SUPER_ADMIN']), proxy(SERVICES.event, rewriteAdminVenues));
 
 app.get('/api/services', (_req, res) => {
   res.json({

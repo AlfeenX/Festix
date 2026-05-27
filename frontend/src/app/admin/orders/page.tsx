@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { useFlash } from '@/components/FlashProvider';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, Order } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '../_config/format';
 
 export default function AdminOrdersPage() {
+  const { showFlash } = useFlash();
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
@@ -17,8 +19,12 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     api<Order[]>('/admin/orders?refresh=1')
       .then(setOrders)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Gagal memuat order.'));
-  }, []);
+      .catch((err) => {
+        const description = err instanceof Error ? err.message : 'Gagal memuat order.';
+        setError(description);
+        showFlash({ type: 'error', title: 'Gagal memuat order', description });
+      });
+  }, [showFlash]);
 
   const filteredOrders = useMemo(() => {
     const keyword = search.trim().toLowerCase();

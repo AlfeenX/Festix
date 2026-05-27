@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, Order } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -10,13 +10,16 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useFlash } from '@/components/FlashProvider';
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const { showFlash } = useFlash();
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const successId = searchParams.get('success');
+  const flashedSuccessId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -29,6 +32,16 @@ export default function OrdersPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    if (!successId || flashedSuccessId.current === successId) return;
+    flashedSuccessId.current = successId;
+    showFlash({
+      type: 'success',
+      title: 'Pembayaran berhasil',
+      description: 'Tiket digital sudah dibuat dan bisa dilihat di daftar order.',
+    });
+  }, [successId, showFlash]);
 
   if (!user) {
     return (
