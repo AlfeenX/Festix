@@ -20,8 +20,30 @@ export function createServiceApp(options: ServiceOptions): {
   const app = express();
   const metrics = createMetrics(options.name);
 
-  app.use(helmet());
-  app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3100', credentials: true }));
+  const rawFrontendUrls = process.env.FRONTEND_URL || 'http://localhost:3100';
+  const allowedFrontendOrigins = rawFrontendUrls
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const isLocalNetworkOrigin = (origin: string) =>
+    /^(https?:\/\/)(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin);
+
+  const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedFrontendOrigins.includes(origin) || isLocalNetworkOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS origin not allowed: ${origin}`));
+  };
+
+  app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(morgan('combined'));
   if (options.enableJsonBodyParsing !== false) {
     app.use(express.json({ limit: '10mb' }));
