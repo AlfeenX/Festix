@@ -1,0 +1,24 @@
+{
+  "name": "festix",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "seed": "tsx scripts/seed.ts",
+    "dev": "docker compose up -d postgres redis rabbitmq && npm run dev:services",
+    "dev:services": "concurrently -n gateway,auth,event,seat,order,payment,notification,worker,web -c blue,green,yellow,magenta,cyan,red,white,gray,bgBlue \"npm run dev -w @festix/api-gateway\" \"npm run dev -w @festix/auth-service\" \"npm run dev -w @festix/event-service\" \"npm run dev -w @festix/seat-service\" \"npm run dev -w @festix/order-service\" \"npm run dev -w @festix/payment-service\" \"npm run dev -w @festix/notification-service\" \"npm run dev -w @festix/queue-worker\" \"npm run dev -w @festix/frontend\"",
+    "build": "npm run build --workspaces --if-present",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "bcrypt": "^5.1.1",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
