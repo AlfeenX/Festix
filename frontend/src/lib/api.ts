@@ -88,11 +88,21 @@ export interface Event {
   title: string;
   description: string;
   banner_url?: string;
+  venue_id?: string;
   starts_at: string;
   ends_at: string;
+  is_published?: boolean;
   venue_name?: string;
   venue_city?: string;
   available_seats?: number;
+}
+
+export interface Venue {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  capacity?: number;
 }
 
 export interface Seat {

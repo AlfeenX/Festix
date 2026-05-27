@@ -1,152 +1,196 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { api, Event } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  Activity,
+  Armchair,
+  CalendarClock,
+  ClipboardList,
+  DollarSign,
+  Loader2,
+  TicketCheck,
+  TrendingUp,
+} from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { api, Event, Order } from '@/lib/api';
+import { formatCurrency, formatDateTime, getEventStatus } from './_config/format';
 
-interface AdminStats {
-  total_events: number;
-  tickets_sold: number;
-  orders_by_status: { status: string; count: string }[];
-}
+const fallbackTrend = [
+  { label: 'Jan', revenue: 2600000, orders: 32 },
+  { label: 'Feb', revenue: 3400000, orders: 46 },
+  { label: 'Mar', revenue: 2800000, orders: 38 },
+  { label: 'Apr', revenue: 5100000, orders: 71 },
+  { label: 'Mei', revenue: 6200000, orders: 84 },
+  { label: 'Jun', revenue: 7600000, orders: 96 },
+];
 
-interface PaymentStats {
-  success_rate: string;
-  by_status: { status: string; count: string; total: string }[];
-}
-
-export default function AdminPage() {
-  const { user } = useAuth();
-  const router = useRouter();
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [paymentStats, setPaymentStats] = useState<PaymentStats | null>(null);
-  const [orders, setOrders] = useState<unknown[]>([]);
+export default function AdminOverviewPage() {
   const [events, setEvents] = useState<Event[]>([]);
-  const [newEvent, setNewEvent] = useState({ title: '', description: '', starts_at: '', ends_at: '' });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      router.push('/');
-      return;
-    }
-    api<AdminStats>('/admin/stats').then(setStats).catch(console.error);
-    api<PaymentStats>('/admin/payments/stats').then(setPaymentStats).catch(console.error);
-    api<unknown[]>('/admin/orders').then(setOrders).catch(console.error);
-    api<Event[]>('/events?refresh=1').then(setEvents).catch(console.error);
-  }, [user, router]);
+    Promise.allSettled([
+      api<Event[]>('/events?refresh=1'),
+      api<Order[]>('/admin/orders?refresh=1'),
+    ]).then(([eventsResult, ordersResult]) => {
+      if (eventsResult.status === 'fulfilled') setEvents(eventsResult.value);
+      if (ordersResult.status === 'fulfilled') setOrders(ordersResult.value);
+      setLoading(false);
+    });
+  }, []);
 
-  const createEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api('/admin/events', {
-        method: 'POST',
-        body: JSON.stringify({ ...newEvent, is_published: true }),
-      });
-      setNewEvent({ title: '', description: '', starts_at: '', ends_at: '' });
-      const updated = await api<Event[]>('/events?refresh=1');
-      setEvents(updated);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create event');
-    }
-  };
+  const stats = useMemo(() => {
+    const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+    const paidOrders = orders.filter((order) => order.status?.toUpperCase() === 'PAID' || order.status?.toUpperCase() === 'COMPLETED');
+    const availableSeats = events.reduce((sum, event) => sum + Number(event.available_seats || 0), 0);
+    const upcomingEvents = events.filter((event) => getEventStatus(event.starts_at, event.ends_at) === 'Upcoming');
 
-  const generateSeats = async (eventId: string) => {
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'}/admin/events/${eventId}/seats/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify({
-          rows: 8,
-          seats_per_row: 20,
-          categories: [
-            { rows: ['A', 'B'], category: 'VIP', price: 500 },
-            { rows: ['C', 'D', 'E'], category: 'REGULAR', price: 250 },
-            { rows: ['F', 'G', 'H'], category: 'ECONOMY', price: 100 },
-          ],
-        }),
-      });
-      alert('Seats generated!');
-    } catch {
-      alert('Failed to generate seats');
-    }
-  };
+    return [
+      {
+        label: 'Revenue',
+        value: revenue > 0 ? formatCurrency(revenue) : formatCurrency(0),
+        helper: 'Total nominal order yang tercatat',
+        icon: DollarSign,
+      },
+      {
+        label: 'Order Masuk',
+        value: orders.length.toString(),
+        helper: `${paidOrders.length} order sudah selesai dibayar`,
+        icon: ClipboardList,
+      },
+      {
+        label: 'Event Aktif',
+        value: events.length.toString(),
+        helper: `${upcomingEvents.length} event akan datang`,
+        icon: CalendarClock,
+      },
+      {
+        label: 'Kursi Tersedia',
+        value: availableSeats.toString(),
+        helper: 'Akumulasi kursi dari katalog event',
+        icon: Armchair,
+      },
+    ];
+  }, [events, orders]);
 
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
-    return <div className="container"><p>Access denied.</p></div>;
-  }
+  const topEvents = useMemo(() => {
+    return [...events]
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+      .slice(0, 5);
+  }, [events]);
 
   return (
-    <div className="container">
-      <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '2rem' }}>Admin Dashboard</h1>
-
-      <div className="grid grid-2" style={{ marginBottom: '2rem' }}>
-        <div className="card">
-          <h3 style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Total Events</h3>
-          <p style={{ fontSize: '2.5rem', fontWeight: 700 }}>{stats?.total_events ?? '—'}</p>
+    <div className="mx-auto max-w-[1500px] space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Badge variant="secondary" className="mb-3 rounded-md">Admin Dashboard</Badge>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Operasional Festix</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Pantau jadwal event, penjualan tiket, okupansi kursi, dan order terbaru dari satu tempat.
+          </p>
         </div>
-        <div className="card">
-          <h3 style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Tickets Sold</h3>
-          <p style={{ fontSize: '2.5rem', fontWeight: 700 }}>{stats?.tickets_sold ?? '—'}</p>
-        </div>
-        <div className="card">
-          <h3 style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Payment Success Rate</h3>
-          <p style={{ fontSize: '2.5rem', fontWeight: 700 }}>{paymentStats?.success_rate ?? '—'}%</p>
-        </div>
-        <div className="card">
-          <h3 style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Orders by Status</h3>
-          {stats?.orders_by_status?.map((o) => (
-            <p key={o.status} style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
-              {o.status}: {o.count}
-            </p>
-          ))}
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/admin/events">Kelola Event</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/admin/events">Tambah Event</Link>
+          </Button>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginBottom: '1rem' }}>Create Event</h2>
-        <form onSubmit={createEvent} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <input className="input" placeholder="Title" value={newEvent.title}
-            onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} required />
-          <input className="input" placeholder="Description" value={newEvent.description}
-            onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} />
-          <input className="input" type="datetime-local" value={newEvent.starts_at}
-            onChange={(e) => setNewEvent({ ...newEvent, starts_at: e.target.value })} required />
-          <input className="input" type="datetime-local" value={newEvent.ends_at}
-            onChange={(e) => setNewEvent({ ...newEvent, ends_at: e.target.value })} required />
-          <button className="btn btn-primary" type="submit" style={{ gridColumn: 'span 2' }}>Create Event</button>
-        </form>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card key={stat.label} className="rounded-lg border-border/80 bg-card p-4 shadow-none">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
+                  <p className="text-2xl font-bold tracking-tight text-foreground">{stat.value}</p>
+                </div>
+                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">{stat.helper}</p>
+            </Card>
+          );
+        })}
       </div>
 
-      <div className="card" style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginBottom: '1rem' }}>Events</h2>
-        {events.map((event) => (
-          <div key={event.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--border)' }}>
-            <span>{event.title}</span>
-            <button className="btn btn-outline" onClick={() => generateSeats(event.id)}>Generate Seats</button>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="rounded-lg border-border/80 bg-card p-5 shadow-none xl:col-span-2">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Tren Penjualan</h2>
+              <p className="text-xs text-muted-foreground">Fallback chart ditampilkan saat endpoint analitik belum tersedia.</p>
+            </div>
+            <Badge variant="outline" className="rounded-md">
+              <TrendingUp className="h-3 w-3" />
+              6 bulan
+            </Badge>
           </div>
-        ))}
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginBottom: '1rem' }}>Recent Orders</h2>
-        {(orders as { id: string; email: string; event_title: string; status: string; total_amount: number }[]).slice(0, 20).map((order) => (
-          <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', fontSize: '0.875rem', borderBottom: '1px solid var(--border)' }}>
-            <span>{order.email} — {order.event_title}</span>
-            <span>{order.status} · ${Number(order.total_amount).toFixed(2)}</span>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={fallbackTrend} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis tickLine={false} axisLine={false} fontSize={11} />
+                <Tooltip formatter={(value) => (typeof value === 'number' ? formatCurrency(value) : value)} />
+                <Area type="monotone" dataKey="revenue" stroke="var(--primary)" strokeWidth={2} fill="url(#revenueFill)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
-        ))}
-      </div>
+        </Card>
 
-      <p style={{ marginTop: '2rem', color: 'var(--muted)', fontSize: '0.875rem' }}>
-        Monitoring: <a href="http://localhost:3030" target="_blank">Grafana</a> ·{' '}
-        <a href="http://localhost:9090" target="_blank">Prometheus</a> ·{' '}
-        <a href="http://localhost:15672" target="_blank">RabbitMQ</a>
-      </p>
+        <Card className="rounded-lg border-border/80 bg-card p-5 shadow-none">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Event Terdekat</h2>
+              <p className="text-xs text-muted-foreground">Prioritas pengecekan seating dan publikasi.</p>
+            </div>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+          <div className="space-y-3">
+            {topEvents.map((event) => (
+              <Link
+                key={event.id}
+                href={`/admin/events`}
+                className="flex items-start gap-3 rounded-lg border border-border/70 p-3 transition-colors hover:bg-muted/50"
+              >
+                <div className="rounded-md bg-primary/10 p-2 text-primary">
+                  <TicketCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(event.starts_at)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{event.venue_name || 'Venue TBA'}{event.venue_city ? `, ${event.venue_city}` : ''}</p>
+                </div>
+                <Badge variant="outline" className="rounded-md text-[10px]">{getEventStatus(event.starts_at, event.ends_at)}</Badge>
+              </Link>
+            ))}
+            {!loading && topEvents.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                <Activity className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground">Belum ada event</p>
+                <p className="text-xs text-muted-foreground">Buat event pertama untuk mengaktifkan dashboard.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
