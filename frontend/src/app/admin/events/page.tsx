@@ -47,6 +47,9 @@ export default function AdminEventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Upcoming' | 'Ongoing' | 'Past'>('All');
+  const [publishedFilter, setPublishedFilter] = useState<'All' | 'Published' | 'Draft'>('All');
+  const [venueFilter, setVenueFilter] = useState('All');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [form, setForm] = useState<EventForm>(emptyEventForm);
@@ -73,15 +76,31 @@ export default function AdminEventsPage() {
     }));
   }, [user, showFlash]);
 
+  const venueNames = useMemo(
+    () => Array.from(new Set(events.map((event) => event.venue_name).filter(Boolean) as string[])).sort(),
+    [events]
+  );
+
   const filteredEvents = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return events;
-    return events.filter((event) =>
-      [event.title, event.venue_name, event.venue_city]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(keyword))
-    );
-  }, [events, search]);
+
+    return events.filter((event) => {
+      const searchMatch =
+        !keyword ||
+        [event.title, event.venue_name, event.venue_city]
+          .filter(Boolean)
+          .some((value) => value!.toLowerCase().includes(keyword));
+
+      const status = getEventStatus(event.starts_at, event.ends_at);
+      const statusMatch = statusFilter === 'All' || status === statusFilter;
+      const publishedMatch =
+        publishedFilter === 'All' ||
+        (publishedFilter === 'Published' ? event.is_published : !event.is_published);
+      const venueMatch = venueFilter === 'All' || event.venue_name === venueFilter;
+
+      return searchMatch && statusMatch && publishedMatch && venueMatch;
+    });
+  }, [events, search, statusFilter, publishedFilter, venueFilter]);
 
   const openCreateDialog = () => {
     setEditingEvent(null);
@@ -167,7 +186,7 @@ export default function AdminEventsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">CRUD event dan update jadwal. Konfigurasi seating tersedia di menu Seating.</p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -177,6 +196,35 @@ export default function AdminEventsPage() {
               className="h-10 pl-9"
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            className="h-10 rounded-full border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary"
+          >
+            <option value="All">Semua status</option>
+            <option value="Upcoming">Akan datang</option>
+            <option value="Ongoing">Sedang berjalan</option>
+            <option value="Past">Selesai</option>
+          </select>
+          <select
+            value={publishedFilter}
+            onChange={(event) => setPublishedFilter(event.target.value as typeof publishedFilter)}
+            className="h-10 rounded-full border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary"
+          >
+            <option value="All">Semua publikasi</option>
+            <option value="Published">Published</option>
+            <option value="Draft">Draft</option>
+          </select>
+          <select
+            value={venueFilter}
+            onChange={(event) => setVenueFilter(event.target.value)}
+            className="h-10 rounded-full border border-border bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary"
+          >
+            <option value="All">Semua venue</option>
+            {venueNames.map((venue) => (
+              <option key={venue} value={venue}>{venue}</option>
+            ))}
+          </select>
           <Button onClick={openCreateDialog} className="gap-2">
             <Plus className="h-4 w-4" />
             Tambah Event

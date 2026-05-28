@@ -102,7 +102,7 @@
 
   Prometheus scrape service berikut:
 
-  api-gateway:3000
+  nginx-gateway:3000
   auth-service:3001
   event-service:3002
   seat-service:3003
@@ -137,7 +137,7 @@
   curl http://localhost:3003/metrics
 
   Catatan: config Prometheus saat ini cocok untuk mode full Docker Compose karena target-nya memakai nama
-  container seperti api-gateway, auth-service, dll.
+  container seperti nginx-gateway, auth-service, dll.
 
   ———
 

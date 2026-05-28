@@ -122,7 +122,6 @@ Festix/
 │   ├── shared/              # DB, Redis, RabbitMQ, types, metrics
 │   └── service-common/      # Express app factory
 ├── services/
-│   ├── api-gateway/
 │   ├── auth-service/
 │   ├── event-service/
 │   ├── seat-service/
@@ -130,6 +129,8 @@ Festix/
 │   ├── payment-service/
 │   ├── notification-service/
 │   └── queue-worker/
+├── infra/
+│   ├── nginx-gateway/        # Nginx-based API gateway
 ├── frontend/                # Next.js 15 app
 ├── infra/                   # Prometheus & Grafana config
 ├── scripts/                 # DB init & seed

@@ -47,6 +47,14 @@ export async function api<T>(
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+
+  if (res.status === 401 && retryOnAuthFailure && path !== '/auth/refresh') {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return api<T>(path, options, false);
+    }
+  }
+
   const text = await res.text();
   const contentType = res.headers.get('content-type') || '';
 
@@ -63,13 +71,6 @@ export async function api<T>(
     throw new Error(
       `Unexpected response type from ${res.url} (${res.status} ${res.statusText}) - expected JSON but got ${contentType}: ${text.slice(0, 300)}`
     );
-  }
-
-  if (res.status === 401 && retryOnAuthFailure && path !== '/auth/refresh') {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      return api<T>(path, options, false);
-    }
   }
 
   if (!res.ok) throw new Error(data?.error || data?.message || `Request failed: ${res.status}`);

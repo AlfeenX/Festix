@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import jwt, { SignOptions } from 'jsonwebtoken';
+import jwt, { JsonWebTokenError, SignOptions, TokenExpiredError } from 'jsonwebtoken';
 import { z } from 'zod';
 import { createServiceApp, asyncHandler, errorHandler } from '@festix/service-common';
 import { query, publishEvent, DOMAIN_EVENTS } from '@festix/shared';
@@ -40,6 +40,20 @@ function signRefresh(userId: string): string {
 
 function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
+}
+
+function sendInvalidToken(res: { status: (code: number) => { json: (body: unknown) => void } }, err: unknown) {
+  if (err instanceof TokenExpiredError) {
+    res.status(401).json({ error: 'Token expired' });
+    return;
+  }
+
+  if (err instanceof JsonWebTokenError) {
+    res.status(401).json({ error: 'Invalid token' });
+    return;
+  }
+
+  throw err;
 }
 
 const { app, start } = createServiceApp({ name: 'auth-service', port: PORT });
@@ -170,8 +184,31 @@ app.get('/verify', asyncHandler(async (req, res) => {
     res.status(401).json({ error: 'No token' });
     return;
   }
-  const payload = verifyToken(auth);
-  res.json({ valid: true, user: payload });
+  try {
+    const payload = verifyToken(auth);
+    res.json({ valid: true, user: payload });
+  } catch (err) {
+    sendInvalidToken(res, err);
+  }
+}));
+
+// For API gateway middleware (nginx `auth_request`) which can only reliably consume status codes and headers.
+// Returns 204 and forwards the verified user context via headers.
+app.get('/internal/verify', asyncHandler(async (req, res) => {
+  const auth = req.headers.authorization?.replace('Bearer ', '');
+  if (!auth) {
+    res.status(401).json({ error: 'No token' });
+    return;
+  }
+  try {
+    const payload = verifyToken(auth);
+    res.setHeader('x-user-id', payload.sub);
+    res.setHeader('x-user-role', payload.role);
+    res.setHeader('x-user-email', payload.email);
+    res.status(204).send();
+  } catch (err) {
+    sendInvalidToken(res, err);
+  }
 }));
 
 app.get('/users/:id', asyncHandler(async (req, res) => {

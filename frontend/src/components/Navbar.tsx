@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { 
   Ticket, Calendar, LayoutDashboard, LogOut, Menu, Search, 
   HelpCircle, Briefcase, User, Smartphone 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/SearchInput';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,8 +31,22 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 export function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = (query: string) => {
+    if (query.trim()) {
+      router.push(`/events?q=${encodeURIComponent(query.trim())}`);
+      setSearchQuery('');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch(searchQuery);
+    }
+  };
 
   // Navigasi menu sesuai request
   const navLinks = [
@@ -71,16 +85,13 @@ export function Navbar() {
 
           {/* 2. SEARCH BAR (Tengah) */}
           <div className="flex-1 max-w-md hidden sm:block relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search events, artists, venues..."
-                className="w-full pl-9 bg-muted/50 border-border focus-visible:ring-1 focus-visible:ring-primary rounded-full"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search events, artists, venues..."
+              inputClassName="w-full bg-muted/50 border-border focus-visible:ring-1 focus-visible:ring-primary rounded-full"
+              onKeyDown={handleSearchKeyDown}
+            />
           </div>
 
           {/* 3. DESKTOP NAV LINKS */}
@@ -211,16 +222,14 @@ export function Navbar() {
                 </SheetHeader>
 
                 {/* Mobile Search */}
-                <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Search events..."
-                    className="w-full pl-9 bg-muted/60 rounded-xl border-0"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search events..."
+                  className="w-full"
+                  inputClassName="w-full bg-muted/60 rounded-xl border-0"
+                  onKeyDown={handleSearchKeyDown}
+                />
                 
                 {/* Mobile Links */}
                 <div className="flex flex-col gap-2 flex-1">

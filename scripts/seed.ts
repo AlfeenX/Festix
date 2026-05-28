@@ -8,7 +8,7 @@ async function seed() {
     [adminHash]
   );
 
-  const superAdminHash = await bcrypt.hash('SuperAdmin123!', 12);
+  const superAdminHash = await bcrypt.hash('Superadmin123!', 12);
   await query(
     `INSERT INTO users (email, password_hash, full_name, role_id)
      SELECT $1, $2, $3, id FROM roles WHERE name = 'SUPER_ADMIN'
@@ -44,7 +44,7 @@ async function seed() {
   }
 
   console.log('Seed complete. Admin: admin@festix.com / Admin123!');
-  console.log('Seed complete. Super Admin: superadmin@festix.com / SuperAdmin123!');
+  console.log('Seed complete. Super Admin: superadmin@festix.com / Superadmin123!');
   await closePool();
 }
 

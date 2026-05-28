@@ -8,6 +8,7 @@ import {
   Bell,
   BellRing,
   ChevronDown,
+  ExternalLink,
   LogOut,
   Menu,
   PanelLeft,
@@ -17,6 +18,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
+import { SearchInput } from '@/components/SearchInput';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +35,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api, Event, Order, User, Venue } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { ADMIN_QUICK_ACTIONS, type AdminQuickAction } from './_config/quick-actions';
 import { getAdminNavGroups, type AdminNavItem } from './_config/navigation';
 
 type MenuBadges = Partial<Record<AdminNavItem['id'], number>>;
@@ -45,6 +48,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [badges, setBadges] = useState<MenuBadges>({});
   const [viewedNotificationSignature, setViewedNotificationSignature] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleAdminSearch = (query: string) => {
+    if (!query.trim()) return;
+
+    const trimmedQuery = query.trim().toLowerCase();
+    // Tentukan halaman berdasarkan konteks pathname saat ini
+    if (pathname.includes('/events')) {
+      router.push(`/admin/events?q=${encodeURIComponent(query.trim())}`);
+    } else if (pathname.includes('/orders')) {
+      router.push(`/admin/orders?q=${encodeURIComponent(query.trim())}`);
+    } else if (pathname.includes('/users')) {
+      router.push(`/admin/users?q=${encodeURIComponent(query.trim())}`);
+    } else {
+      // Default ke events jika di halaman lain
+      router.push(`/admin/events?q=${encodeURIComponent(query.trim())}`);
+    }
+    setSearchQuery('');
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleAdminSearch(searchQuery);
+    }
+  };
 
   const navGroups = useMemo(() => getAdminNavGroups(user?.role), [user?.role]);
   const notifications = useMemo(() => {
@@ -156,6 +184,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return content;
   };
 
+  const renderQuickAction = (action: AdminQuickAction, mobile = false) => {
+    const Icon = action.icon;
+
+    const content = (
+      <a
+        key={action.id}
+        href={action.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => mobile && setIsMobileOpen(false)}
+        className={`group flex items-center rounded-lg text-[13px] font-medium transition-colors ${
+          isCollapsed && !mobile ? 'mx-auto h-10 w-10 justify-center px-0' : 'gap-3 px-3 py-2'
+        } text-muted-foreground hover:bg-muted hover:text-foreground`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {(!isCollapsed || mobile) && (
+          <>
+            <span className="min-w-0 flex-1 truncate">{action.label}</span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" />
+          </>
+        )}
+      </a>
+    );
+
+    if (isCollapsed && !mobile) {
+      return (
+        <Tooltip key={action.id}>
+          <TooltipTrigger asChild>{content}</TooltipTrigger>
+          <TooltipContent side="right">
+            <div className="space-y-0.5">
+              <p>{action.label}</p>
+              <p className="max-w-52 text-[11px] text-muted-foreground">{action.description}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return content;
+  };
+
   const sidebarContent = (mobile = false) => (
     <>
       <div className="flex h-16 items-center gap-2 border-b border-border/70 px-4">
@@ -181,6 +250,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {group.items.map((item) => renderNavItem(item, mobile))}
           </div>
         ))}
+
+        <div className="space-y-1 pt-2">
+          {(!isCollapsed || mobile) && (
+            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-normal text-muted-foreground/70">
+              Quick Actions
+            </div>
+          )}
+          {ADMIN_QUICK_ACTIONS.map((action) => renderQuickAction(action, mobile))}
+        </div>
       </nav>
 
       <div className="border-t border-border/70 p-3">
@@ -271,11 +349,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </Sheet>
 
                 <div className="relative hidden sm:block">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <div className="flex h-9 w-72 items-center justify-between rounded-lg border border-border bg-card pl-9 pr-3 text-xs text-muted-foreground">
-                    <span>Cari event, order, atau seating</span>
-                    <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px]">/</kbd>
-                  </div>
+                  <SearchInput
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Cari event, order, atau user..."
+                    className="w-72"
+                    inputClassName="h-9 w-72 border-border bg-card text-xs focus-visible:ring-1 focus-visible:ring-primary"
+                    iconClassName="h-3.5 w-3.5"
+                    showShortcut={true}
+                    onKeyDown={handleSearchKeyDown}
+                  />
                 </div>
               </div>
 
