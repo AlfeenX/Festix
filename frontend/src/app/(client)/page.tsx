@@ -31,7 +31,7 @@ export default function HomePage() {
       genre: 'Electronic',
       date: 'June 18, 2026',
       venue: 'Marina Bay, Singapore',
-      price: '$120.00',
+      price: 'Rp1.200.000',
       rating: '4.92',
       image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=800&q=80',
     },
@@ -41,7 +41,7 @@ export default function HomePage() {
       genre: 'Rock & Metal',
       date: 'July 04, 2026',
       venue: 'Symphony Ampitheatre, San Francisco',
-      price: '$85.00',
+      price: 'Rp850.000',
       rating: '4.85',
       image: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=800&q=80',
     },
@@ -51,7 +51,7 @@ export default function HomePage() {
       genre: 'Jazz & Blues',
       date: 'August 12, 2026',
       venue: 'The Blue Note Lounge, New York',
-      price: '$45.00',
+      price: 'Rp450.000',
       rating: '4.98',
       image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=800&q=80',
     },
@@ -61,7 +61,7 @@ export default function HomePage() {
       genre: 'Pop & R&B',
       date: 'September 20, 2026',
       venue: 'Shibuya Dome, Tokyo',
-      price: '$110.00',
+      price: 'Rp1.100.000',
       rating: '4.90',
       image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80',
     },
@@ -71,7 +71,7 @@ export default function HomePage() {
       genre: 'Electronic',
       date: 'October 05, 2026',
       venue: 'Boom, Belgium',
-      price: '$199.00',
+      price: 'Rp1.990.000',
       rating: '4.99',
       image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=800&q=80',
     },
@@ -81,7 +81,7 @@ export default function HomePage() {
       genre: 'Music Festivals',
       date: 'November 15, 2026',
       venue: 'Ubud Arts Center, Bali',
-      price: '$35.00',
+      price: 'Rp350.000',
       rating: '4.76',
       image: 'https://images.unsplash.com/photo-1484755560693-a4074577af3a?auto=format&fit=crop&w=800&q=80',
     }
@@ -392,7 +392,7 @@ export default function HomePage() {
                   <span className="text-xs">English (US)</span>
                 </button>
                 <button className="hover:underline bg-transparent border-0 p-0 cursor-pointer text-xs">
-                  $ USD
+                  Rp IDR
                 </button>
               </div>
 

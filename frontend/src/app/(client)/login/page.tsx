@@ -46,7 +46,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[420px] my-16 px-6 sm:px-0 min-h-[80vh] flex flex-col justify-center bg-background antialiased">
+    <div className="mx-auto max-w-105 my-16 px-6 sm:px-0 min-h-[80vh] flex flex-col justify-center bg-background antialiased">
       <div className="space-y-8 w-full">
         
         {/* Brand Header */}
@@ -141,25 +141,6 @@ export default function LoginPage() {
             Daftar Sekarang
           </Link>
         </p>
-
-        {/* Modern Minimalist Demo Sandbox Credentials */}
-        <div className="pt-6 border-t border-muted/60 space-y-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-            <Key className="h-3 w-3 text-muted-foreground/80" />
-            Akses Uji Coba (Sandbox Admin)
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3 text-[11px] font-mono p-3 bg-neutral-50 dark:bg-neutral-900 border border-muted rounded-xl text-muted-foreground">
-            <div className="space-y-0.5 border-r border-muted pr-2">
-              <span className="block text-[9px] uppercase font-sans font-semibold text-neutral-400">Email</span>
-              <span className="text-foreground select-all break-all">admin@festix.com</span>
-            </div>
-            <div className="space-y-0.5 pl-1">
-              <span className="block text-[9px] uppercase font-sans font-semibold text-neutral-400">Password</span>
-              <span className="text-foreground select-all">Admin123!</span>
-            </div>
-          </div>
-        </div>
 
       </div>
     </div>

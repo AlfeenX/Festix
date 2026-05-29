@@ -18,9 +18,9 @@ const seatConfig = {
   rows: 8,
   seats_per_row: 20,
   categories: [
-    { rows: ['A', 'B'], category: 'VIP', price: 500 },
-    { rows: ['C', 'D', 'E'], category: 'REGULAR', price: 250 },
-    { rows: ['F', 'G', 'H'], category: 'ECONOMY', price: 100 },
+    { rows: ['A', 'B'], category: 'VIP', price: 750000 },
+    { rows: ['C', 'D', 'E'], category: 'REGULAR', price: 350000 },
+    { rows: ['F', 'G', 'H'], category: 'ECONOMY', price: 150000 },
   ],
 };
 
@@ -167,7 +167,7 @@ export default function AdminSeatingPage() {
 
               <div className="mt-4 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
                 <p>Venue: {event.venue_name || 'TBA'}{event.venue_city ? `, ${event.venue_city}` : ''}</p>
-                <p className="mt-1">Template: VIP {formatCurrency(500)}, Regular {formatCurrency(250)}, Economy {formatCurrency(100)}</p>
+                <p className="mt-1">Template: VIP {formatCurrency(750000)}, Regular {formatCurrency(350000)}, Economy {formatCurrency(150000)}</p>
               </div>
 
               <Button

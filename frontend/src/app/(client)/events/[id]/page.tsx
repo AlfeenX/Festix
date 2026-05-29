@@ -15,6 +15,10 @@ import { useFlash } from '@/components/FlashProvider';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3003';
 
+function formatCurrency(value: number | string) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
+}
+
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -282,7 +286,7 @@ export default function EventDetailPage() {
                     </span>
                     <span className="text-muted-foreground capitalize text-[10px]">{s.category.toLowerCase()}</span>
                   </div>
-                  <span className="font-semibold text-foreground">${Number(s.price).toFixed(2)}</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(s.price)}</span>
                 </li>
               ))}
             </ul>
@@ -290,7 +294,7 @@ export default function EventDetailPage() {
 
           <div className="pt-2 border-t border-muted/60 flex justify-between items-baseline">
             <span className="text-xs text-muted-foreground">Total</span>
-            <span className="text-lg font-bold tracking-tight text-foreground">${total.toFixed(2)}</span>
+            <span className="text-lg font-bold tracking-tight text-foreground">{formatCurrency(total)}</span>
           </div>
 
           {!user && (
@@ -328,7 +332,7 @@ export default function EventDetailPage() {
             ) : (
               <div className="flex items-center gap-2 justify-center">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Konfirmasi Pemesanan (${total.toFixed(2)})</span>
+                <span>Konfirmasi Pemesanan ({formatCurrency(total)})</span>
               </div>
             )}
           </Button>

@@ -173,8 +173,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <TooltipTrigger asChild>{content}</TooltipTrigger>
           <TooltipContent side="right">
             <div className="space-y-0.5">
-              <p>{item.label}</p>
-              <p className="max-w-52 text-[11px] text-muted-foreground">{item.description}</p>
+              <p className='font-medium'>{item.label}</p>
+              <p className="max-w-52 text-[11px] text-muted/70">{item.description}</p>
             </div>
           </TooltipContent>
         </Tooltip>
@@ -214,8 +214,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <TooltipTrigger asChild>{content}</TooltipTrigger>
           <TooltipContent side="right">
             <div className="space-y-0.5">
-              <p>{action.label}</p>
-              <p className="max-w-52 text-[11px] text-muted-foreground">{action.description}</p>
+              <p className='font-medium'>{action.label}</p>
+              <p className="max-w-52 text-[11px] text-muted/70">{action.description}</p>
             </div>
           </TooltipContent>
         </Tooltip>

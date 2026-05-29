@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { api, Payment } from '@/lib/api';
 
 function formatCurrency(value: number | string) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) * 1000);
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 }
 
 function methodView(method?: string) {
