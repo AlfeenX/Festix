@@ -54,26 +54,97 @@ async function invalidateEventCache(eventId: string) {
 
 app.get('/events', asyncHandler(async (req, res) => {
   const redis = getRedis();
-  const cached = await redis.get(RedisKeys.eventsList());
-  if (cached && !req.query.refresh) {
-    res.json(JSON.parse(cached));
-    return;
+  const search = req.query.q as string | undefined;
+  const status = req.query.status as string | undefined;
+  const city = req.query.city as string | undefined;
+  const published = req.query.published as string | undefined;
+  const venueName = req.query.venueName as string | undefined;
+  const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+
+  const userRole = req.headers['x-user-role'] as string | undefined;
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+
+  let baseSql = `FROM events e LEFT JOIN venues v ON e.venue_id = v.id`;
+  const whereClauses: string[] = [];
+  const params: unknown[] = [];
+
+  if (!isAdmin) {
+    whereClauses.push('e.is_published = true');
+  } else if (published && published !== 'All') {
+    if (published === 'Published') {
+      whereClauses.push('e.is_published = true');
+    } else if (published === 'Draft') {
+      whereClauses.push('e.is_published = false');
+    }
   }
 
-  const search = req.query.q as string | undefined;
-  let sql = `SELECT e.*, v.name as venue_name, v.city as venue_city,
-    (SELECT COUNT(*) FROM seats s WHERE s.event_id = e.id AND s.status = 'AVAILABLE') as available_seats
-    FROM events e LEFT JOIN venues v ON e.venue_id = v.id WHERE e.is_published = true`;
-  const params: unknown[] = [];
   if (search) {
     params.push(`%${search}%`);
-    sql += ` AND (e.title ILIKE $${params.length} OR e.description ILIKE $${params.length})`;
+    whereClauses.push(`(e.title ILIKE $${params.length} OR e.description ILIKE $${params.length} OR v.name ILIKE $${params.length} OR v.city ILIKE $${params.length})`);
   }
-  sql += ' ORDER BY e.starts_at ASC';
 
-  const result = await query(sql, params);
-  await redis.setex(RedisKeys.eventsList(), 60, JSON.stringify(result.rows));
-  res.json(result.rows);
+  if (city && city !== 'All') {
+    params.push(city);
+    whereClauses.push(`v.city = $${params.length}`);
+  }
+
+  if (venueName && venueName !== 'All') {
+    params.push(venueName);
+    whereClauses.push(`v.name = $${params.length}`);
+  }
+
+  if (status && status !== 'All') {
+    const now = new Date().toISOString();
+    params.push(now);
+    if (status === 'Upcoming') {
+      whereClauses.push(`e.starts_at > $${params.length}`);
+    } else if (status === 'Past') {
+      whereClauses.push(`e.ends_at < $${params.length}`);
+    } else if (status === 'Ongoing') {
+      whereClauses.push(`e.starts_at <= $${params.length} AND e.ends_at >= $${params.length}`);
+    }
+  }
+
+  const whereSql = whereClauses.length > 0 ? ` WHERE ${whereClauses.join(' AND ')}` : '';
+  
+  const countSql = `SELECT COUNT(*) ${baseSql}${whereSql}`;
+  let selectSql = `SELECT e.*, v.name as venue_name, v.city as venue_city,
+    (SELECT COUNT(*) FROM seats s WHERE s.event_id = e.id AND s.status = 'AVAILABLE') as available_seats
+    ${baseSql}${whereSql} ORDER BY e.starts_at ASC`;
+
+  const isCacheable = !page && !search && !status && !city && !published && !venueName && !isAdmin;
+  if (isCacheable) {
+    const cached = await redis.get(RedisKeys.eventsList());
+    if (cached && !req.query.refresh) {
+      res.json(JSON.parse(cached));
+      return;
+    }
+  }
+
+  if (page !== undefined) {
+    const offset = (page - 1) * limit;
+    const countResult = await query(countSql, params);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const paginatedParams = [...params, limit, offset];
+    selectSql += ` LIMIT $${paginatedParams.length - 1} OFFSET $${paginatedParams.length}`;
+    const result = await query(selectSql, paginatedParams);
+
+    res.json({
+      data: result.rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+  } else {
+    const result = await query(selectSql, params);
+    if (isCacheable) {
+      await redis.setex(RedisKeys.eventsList(), 60, JSON.stringify(result.rows));
+    }
+    res.json(result.rows);
+  }
 }));
 
 app.get('/events/:id', asyncHandler(async (req, res) => {
@@ -192,9 +263,44 @@ app.post('/events/:id/seats/generate', asyncHandler(async (req, res) => {
   res.json({ message: `Generated ${seats.length} seats`, total: seats.length });
 }));
 
-app.get('/venues', asyncHandler(async (_req, res) => {
-  const result = await query('SELECT * FROM venues ORDER BY name');
-  res.json(result.rows);
+app.get('/venues', asyncHandler(async (req, res) => {
+  const search = req.query.q as string | undefined;
+  const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+
+  let sql = 'SELECT * FROM venues';
+  let countSql = 'SELECT COUNT(*) FROM venues';
+  const params: unknown[] = [];
+
+  if (search) {
+    params.push(`%${search}%`);
+    const searchFilter = ' WHERE name ILIKE $1 OR address ILIKE $1 OR city ILIKE $1';
+    sql += searchFilter;
+    countSql += searchFilter;
+  }
+
+  sql += ' ORDER BY name';
+
+  if (page !== undefined) {
+    const offset = (page - 1) * limit;
+    const countResult = await query(countSql, params);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const paginatedParams = [...params, limit, offset];
+    sql += ` LIMIT $${paginatedParams.length - 1} OFFSET $${paginatedParams.length}`;
+    const result = await query(sql, paginatedParams);
+
+    res.json({
+      data: result.rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+  } else {
+    const result = await query(sql, params);
+    res.json(result.rows);
+  }
 }));
 
 app.post('/admin/venues', asyncHandler(async (req, res) => {

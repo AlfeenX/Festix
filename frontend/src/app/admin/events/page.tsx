@@ -32,6 +32,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, Event, Venue } from "@/lib/api";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { useAuth } from "@/lib/auth";
 import { useFlash } from "@/components/FlashProvider";
 import { formatDateTime, getEventStatus } from "../_config/format";
@@ -76,9 +85,36 @@ export default function AdminEventsPage() {
   const [message, setMessage] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
   const loadEvents = () => {
-    api<Event[]>("/events?refresh=1")
-      .then(setEvents)
+    const queryParams = new URLSearchParams();
+    queryParams.append("page", String(page));
+    queryParams.append("limit", "10");
+    queryParams.append("refresh", "1");
+
+    if (search) {
+      queryParams.append("q", search.trim());
+    }
+    if (statusFilter !== "All") {
+      queryParams.append("status", statusFilter);
+    }
+    if (publishedFilter !== "All") {
+      queryParams.append("published", publishedFilter);
+    }
+    if (venueFilter !== "All") {
+      queryParams.append("venueName", venueFilter);
+    }
+
+    api<{ data: Event[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/events?${queryParams.toString()}`
+    )
+      .then((res) => {
+        setEvents(res.data || []);
+        setTotalPages(res.totalPages || 1);
+      })
       .catch((error) =>
         showFlash({
           type: "error",
@@ -94,6 +130,10 @@ export default function AdminEventsPage() {
   useEffect(() => {
     if (!user) return;
     loadEvents();
+  }, [user, page, search, statusFilter, publishedFilter, venueFilter]);
+
+  useEffect(() => {
+    if (!user) return;
     api<Venue[]>("/venues")
       .then(setVenues)
       .catch((error) =>
@@ -108,39 +148,80 @@ export default function AdminEventsPage() {
       );
   }, [user, showFlash]);
 
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, publishedFilter, venueFilter]);
+
   const venueNames = useMemo(
     () =>
       Array.from(
         new Set(
-          events.map((event) => event.venue_name).filter(Boolean) as string[],
+          venues.map((venue) => venue.name).filter(Boolean) as string[],
         ),
       ).sort(),
-    [events],
+    [venues],
   );
 
-  const filteredEvents = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+  const renderPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
 
-    return events.filter((event) => {
-      const searchMatch =
-        !keyword ||
-        [event.title, event.venue_name, event.venue_city]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(keyword));
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
 
-      const status = getEventStatus(event.starts_at, event.ends_at);
-      const statusMatch = statusFilter === "All" || status === statusFilter;
-      const publishedMatch =
-        publishedFilter === "All" ||
-        (publishedFilter === "Published"
-          ? event.is_published
-          : !event.is_published);
-      const venueMatch =
-        venueFilter === "All" || event.venue_name === venueFilter;
+      let start = Math.max(2, page - 1);
+      let end = Math.min(totalPages - 1, page + 1);
 
-      return searchMatch && statusMatch && publishedMatch && venueMatch;
+      if (page <= 2) {
+        end = 4;
+      } else if (page >= totalPages - 1) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) {
+        pages.push("ellipsis");
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < totalPages - 1) {
+        pages.push("ellipsis");
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages.map((p, idx) => {
+      if (p === "ellipsis") {
+        return (
+          <PaginationItem key={`ellipsis-${idx}`}>
+            <PaginationEllipsis />
+          </PaginationItem>
+        );
+      }
+      return (
+        <PaginationItem key={p}>
+          <PaginationLink
+            href="#"
+            isActive={p === page}
+            onClick={(e) => {
+              e.preventDefault();
+              setPage(p as number);
+            }}
+          >
+            {p}
+          </PaginationLink>
+        </PaginationItem>
+      );
     });
-  }, [events, search, statusFilter, publishedFilter, venueFilter]);
+  };
 
   const openCreateDialog = () => {
     setEditingEvent(null);
@@ -327,7 +408,7 @@ export default function AdminEventsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEvents.map((event) => (
+            {events.map((event) => (
               <TableRow key={event.id} className="hover:bg-muted/30">
                 <TableCell className="px-6 py-4 text-left">
                   <div className="max-w-md">
@@ -378,7 +459,7 @@ export default function AdminEventsPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {filteredEvents.length === 0 && (
+            {events.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={5}
@@ -391,6 +472,36 @@ export default function AdminEventsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center pt-2">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page > 1) setPage(page - 1);
+                  }}
+                  className={page === 1 ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+              {renderPageNumbers()}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page < totalPages) setPage(page + 1);
+                  }}
+                  className={page === totalPages ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-2xl">

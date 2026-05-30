@@ -25,6 +25,15 @@ import {
 } from '@/components/ui/table';
 import { useFlash } from '@/components/FlashProvider';
 import { api, Venue } from '@/lib/api';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 type VenueForm = {
   name: string;
@@ -63,15 +72,39 @@ export default function AdminVenuesPage() {
   const { showFlash } = useFlash();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
   const [form, setForm] = useState<VenueForm>(emptyVenueForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
+
   const loadVenues = () => {
-    api<Venue[]>('/venues')
-      .then(setVenues)
+    const queryParams = new URLSearchParams();
+    queryParams.append('page', String(page));
+    queryParams.append('limit', '10');
+    if (debouncedSearch) {
+      queryParams.append('q', debouncedSearch);
+    }
+
+    api<{ data: Venue[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/venues?${queryParams.toString()}`
+    )
+      .then((res) => {
+        setVenues(res.data || []);
+        setTotalPages(res.totalPages || 1);
+      })
       .catch((error) => showFlash({
         type: 'error',
         title: 'Gagal memuat venue',
@@ -81,17 +114,72 @@ export default function AdminVenuesPage() {
 
   useEffect(() => {
     loadVenues();
-  }, []);
+  }, [page, debouncedSearch]);
 
-  const filteredVenues = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return venues;
-    return venues.filter((venue) =>
-      [venue.name, venue.address, venue.city]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(keyword))
-    );
-  }, [venues, search]);
+  // Reset page to 1 when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const renderPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+
+      let start = Math.max(2, page - 1);
+      let end = Math.min(totalPages - 1, page + 1);
+
+      if (page <= 2) {
+        end = 4;
+      } else if (page >= totalPages - 1) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) {
+        pages.push('ellipsis');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < totalPages - 1) {
+        pages.push('ellipsis');
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages.map((p, idx) => {
+      if (p === 'ellipsis') {
+        return (
+          <PaginationItem key={`ellipsis-${idx}`}>
+            <PaginationEllipsis />
+          </PaginationItem>
+        );
+      }
+      return (
+        <PaginationItem key={p}>
+          <PaginationLink
+            href="#"
+            isActive={p === page}
+            onClick={(e) => {
+              e.preventDefault();
+              setPage(p as number);
+            }}
+          >
+            {p}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    });
+  };
 
   const openCreateDialog = () => {
     setEditingVenue(null);
@@ -207,7 +295,7 @@ export default function AdminVenuesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredVenues.map((venue) => (
+            {venues.map((venue) => (
               <TableRow key={venue.id} className="hover:bg-muted/30">
                 <TableCell className="px-6 py-4 font-bold text-foreground">{venue.name}</TableCell>
                 <TableCell className="px-6 py-4 text-sm text-muted-foreground">
@@ -230,7 +318,7 @@ export default function AdminVenuesPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {filteredVenues.length === 0 && (
+            {venues.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="px-6 py-10 text-center font-medium text-muted-foreground">
                   Tidak ada venue yang cocok.
@@ -240,6 +328,36 @@ export default function AdminVenuesPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center pt-2">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page > 1) setPage(page - 1);
+                  }}
+                  className={page === 1 ? 'pointer-events-none opacity-50' : ''}
+                />
+              </PaginationItem>
+              {renderPageNumbers()}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page < totalPages) setPage(page + 1);
+                  }}
+                  className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-2xl">

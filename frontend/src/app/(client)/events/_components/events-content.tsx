@@ -2,11 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api, Event } from '@/lib/api';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import { api, Event, Venue } from '@/lib/api';
+import { CalendarRange, Search } from 'lucide-react';
 import { EventCard } from '@/components/EventCard';
-import { Search, CalendarRange, SlidersHorizontal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 
 function getEventStatus(startsAt: string, endsAt: string) {
   const now = Date.now();
@@ -26,6 +34,11 @@ export function EventsContent() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<'All' | 'Upcoming' | 'Ongoing' | 'Past'>('All');
   const [selectedCity, setSelectedCity] = useState('All');
+  const [cities, setCities] = useState<string[]>([]);
+
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Initialize search from URL params
   useEffect(() => {
@@ -35,6 +48,18 @@ export function EventsContent() {
     }
   }, [searchParams]);
 
+  // Load all cities from venues to populate the filter dropdown
+  useEffect(() => {
+    api<Venue[]>('/venues')
+      .then((venuesList) => {
+        const uniqueCities = Array.from(
+          new Set(venuesList.map((v) => v.city).filter(Boolean) as string[])
+        ).sort((a, b) => a.localeCompare(b));
+        setCities(uniqueCities);
+      })
+      .catch(console.error);
+  }, []);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
@@ -42,36 +67,103 @@ export function EventsContent() {
     return () => window.clearTimeout(timeout);
   }, [search]);
 
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedStatus, selectedCity]);
+
+  // Fetch paginated events from server
   useEffect(() => {
     setLoading(true);
-    api<Event[]>('/events?refresh=1')
-      .then(setEvents)
-      .catch(console.error)
+    const queryParams = new URLSearchParams();
+    queryParams.append('page', String(page));
+    queryParams.append('limit', '10');
+    queryParams.append('refresh', '1');
+
+    if (debouncedSearch) {
+      queryParams.append('q', debouncedSearch);
+    }
+    if (selectedStatus !== 'All') {
+      queryParams.append('status', selectedStatus);
+    }
+    if (selectedCity !== 'All') {
+      queryParams.append('city', selectedCity);
+    }
+
+    api<{ data: Event[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/events?${queryParams.toString()}`
+    )
+      .then((res) => {
+        setEvents(res.data || []);
+        setTotalPages(res.totalPages || 1);
+      })
+      .catch((error) => {
+        console.error('Error fetching events:', error);
+        setEvents([]);
+        setTotalPages(1);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, debouncedSearch, selectedStatus, selectedCity]);
 
-  const cities = useMemo(() => {
-    return Array.from(
-      new Set(events.map((event) => event.venue_city).filter(Boolean) as string[])
-    ).sort((a, b) => a.localeCompare(b));
-  }, [events]);
+  const renderPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
 
-  const filteredEvents = useMemo(() => {
-    const keyword = debouncedSearch.toLowerCase();
-    return events.filter((event) => {
-      const searchMatch =
-        !keyword ||
-        [event.title, event.description, event.venue_name, event.venue_city]
-          .filter(Boolean)
-          .some((value) => value!.toLowerCase().includes(keyword));
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
 
-      const status = getEventStatus(event.starts_at, event.ends_at);
-      const statusMatch = selectedStatus === 'All' || status === selectedStatus;
-      const cityMatch = selectedCity === 'All' || event.venue_city === selectedCity;
+      let start = Math.max(2, page - 1);
+      let end = Math.min(totalPages - 1, page + 1);
 
-      return searchMatch && statusMatch && cityMatch;
+      if (page <= 2) {
+        end = 4;
+      } else if (page >= totalPages - 1) {
+        start = totalPages - 3;
+      }
+
+      if (start > 2) {
+        pages.push('ellipsis');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < totalPages - 1) {
+        pages.push('ellipsis');
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages.map((p, idx) => {
+      if (p === 'ellipsis') {
+        return (
+          <PaginationItem key={`ellipsis-${idx}`}>
+            <PaginationEllipsis />
+          </PaginationItem>
+        );
+      }
+      return (
+        <PaginationItem key={p}>
+          <PaginationLink
+            href="#"
+            isActive={p === page}
+            onClick={(e) => {
+              e.preventDefault();
+              setPage(p as number);
+            }}
+          >
+            {p}
+          </PaginationLink>
+        </PaginationItem>
+      );
     });
-  }, [events, debouncedSearch, selectedStatus, selectedCity]);
+  };
 
   return (
     <div className="mx-auto max-w-350 px-6 md:px-10 lg:px-12 py-8 space-y-8 min-h-screen bg-background antialiased">
@@ -143,7 +235,7 @@ export function EventsContent() {
             </div>
           ))}
         </div>
-      ) : filteredEvents.length === 0 ? (
+      ) : events.length === 0 ? (
         /* Empty State yang clean */
         <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto space-y-2">
           <p className="text-xl font-semibold text-foreground">Tidak ada hasil ditemukan</p>
@@ -154,9 +246,40 @@ export function EventsContent() {
       ) : (
         /* Airbnb Grid Layout: Menggunakan 4 kolom di layar besar untuk memaksimalkan eksplorasi visual */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-10">
-          {filteredEvents.map((event) => (
+          {events.map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
+        </div>
+      )}
+
+      {/* Pagination UI */}
+      {!loading && totalPages > 1 && (
+        <div className="flex justify-center pt-8 border-t border-muted/60">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page > 1) setPage(page - 1);
+                  }}
+                  className={page === 1 ? 'pointer-events-none opacity-50' : ''}
+                />
+              </PaginationItem>
+              {renderPageNumbers()}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page < totalPages) setPage(page + 1);
+                  }}
+                  className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
 
