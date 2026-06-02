@@ -52,7 +52,7 @@ export function Navbar() {
   const navLinks = [
     { name: 'Find Events', href: '/events', icon: Calendar },
     { name: 'Get Help', href: '/help', icon: HelpCircle },
-    { name: 'Work With Us', href: '/work', icon: Briefcase },
+    { name: 'Work With Us', href: '/careers', icon: Briefcase },
   ];
 
   const isAdmin = user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');

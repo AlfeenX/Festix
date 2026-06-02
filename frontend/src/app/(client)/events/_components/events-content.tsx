@@ -40,11 +40,15 @@ export function EventsContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Initialize search from URL params
+  // Initialize search and city from URL params
   useEffect(() => {
     const q = searchParams.get('q');
     if (q) {
       setSearch(q);
+    }
+    const city = searchParams.get('city');
+    if (city) {
+      setSelectedCity(city);
     }
   }, [searchParams]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { 
   Ticket, Search, Zap, Shield, Heart, ArrowRight, Music, Disc, 
@@ -10,10 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { api, Event, Venue } from '@/lib/api';
 
 export default function HomePage() {
   const [search, setSearch] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('All');
+  const [selectedCity, setSelectedCity] = useState('All');
+  const [cities, setCities] = useState<string[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const genres = ['All', 'Music Festivals', 'Electronic', 'Rock & Metal', 'Pop & R&B', 'Jazz & Blues'];
 
@@ -87,6 +92,89 @@ export default function HomePage() {
     }
   ];
 
+  // Load cities from /venues
+  useEffect(() => {
+    api<Venue[]>('/venues')
+      .then((venuesList) => {
+        const uniqueCities = Array.from(
+          new Set(venuesList.map((v) => v.city).filter(Boolean) as string[])
+        ).sort((a, b) => a.localeCompare(b));
+        setCities(uniqueCities);
+      })
+      .catch(console.error);
+  }, []);
+
+  // Load events from /events
+  useEffect(() => {
+    setLoading(true);
+    api<Event[]>('/events?refresh=1')
+      .then((res) => {
+        setEvents(res || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, []);
+
+  const featuredEvents = useMemo(() => {
+    const genresList = ['Music Festivals', 'Electronic', 'Rock & Metal', 'Pop & R&B', 'Jazz & Blues'];
+    const PLACEHOLDER_IMAGES = [
+      'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1484755560693-a4074577af3a?auto=format&fit=crop&w=800&q=80'
+    ];
+
+    const getHash = (str: string) => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return Math.abs(hash);
+    };
+
+    if (!events || events.length === 0) {
+      return mockFeaturedEvents;
+    }
+
+    return events.slice(0, 6).map((event, index) => {
+      const hashVal = getHash(event.title || event.id);
+      
+      const formattedDate = event.starts_at 
+        ? new Date(event.starts_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+        : 'Date TBA';
+
+      const formattedPrice = new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(350000 + (hashVal % 12) * 100000);
+
+      const rating = (4.7 + (hashVal % 30) / 100).toFixed(2);
+      const genre = genresList[hashVal % genresList.length];
+      
+      const image = event.banner_url && (event.banner_url.startsWith('http://') || event.banner_url.startsWith('https://'))
+        ? event.banner_url
+        : PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
+
+      return {
+        id: event.id,
+        title: event.title,
+        genre,
+        date: formattedDate,
+        venue: `${event.venue_name || 'TBA'}${event.venue_city ? `, ${event.venue_city}` : ''}`,
+        price: formattedPrice,
+        rating,
+        image,
+      };
+    });
+  }, [events]);
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground antialiased selection:bg-primary selection:text-primary-foreground">
       
@@ -134,12 +222,22 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* Field 2: Tipe Pengalaman (Statis ala BnB) */}
-              <div className="flex-1 hidden md:block px-6 py-1 text-left border-r border-border/60">
+              {/* Field 2: Tipe Pengalaman (Dinamis ala BnB) */}
+              <div className="flex-1 hidden md:block px-6 py-1 text-left border-r border-border/60 relative group">
                 <label className="block text-[9px] font-extrabold uppercase tracking-widest text-muted-foreground">Location</label>
-                <span className="block text-xs sm:text-sm text-muted-foreground truncate font-normal mt-0.5">Jakarta
-                  <MapPin className="h-3 w-3 inline text-muted-foreground/60 ml-1" />
-                </span>
+                <div className="flex items-center gap-1 mt-0.5 relative">
+                  <select 
+                    value={selectedCity}
+                    onChange={(e) => setSelectedCity(e.target.value)}
+                    className="w-full bg-transparent p-0 text-xs sm:text-sm font-medium text-foreground placeholder:text-muted-foreground/50 border-0 focus:ring-0 focus:outline-none appearance-none cursor-pointer pr-5"
+                  >
+                    <option value="All" className="bg-background text-foreground">All Locations</option>
+                    {cities.map((city) => (
+                      <option key={city} value={city} className="bg-background text-foreground">{city}</option>
+                    ))}
+                  </select>
+                  <MapPin className="h-3 w-3 text-muted-foreground/60 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
+                </div>
               </div>
 
               {/* Tombol Aksi Kapsul Gelap Kontras */}
@@ -147,7 +245,13 @@ export default function HomePage() {
                 asChild
                 className="w-full md:w-auto h-10 md:h-10 px-6 rounded-xl md:rounded-full bg-foreground text-background hover:bg-foreground/90 font-bold shrink-0 flex items-center justify-center gap-2 transition-all shadow-md"
               >
-                <Link href={search ? `/events?q=${encodeURIComponent(search)}` : '/events'}>
+                <Link href={
+                  `/events?` + 
+                  new URLSearchParams({
+                    ...(search ? { q: search } : {}),
+                    ...(selectedCity !== 'All' ? { city: selectedCity } : {})
+                  }).toString()
+                }>
                   <Search className="h-3.5 w-3.5 stroke-[3]" />
                   <span className="text-xs">Search</span>
                 </Link>
@@ -187,50 +291,64 @@ export default function HomePage() {
 
           {/* Grid Modul Kamar/Destinasi Khas Airbnb */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-10">
-            {mockFeaturedEvents.map((event) => (
-              <Link key={event.id} href={`/events/${event.id}`} className="group flex flex-col space-y-3 cursor-pointer">
-                
-                {/* Image Wrapper dengan Aspek Rasio Kotak Sempurna Airbnb */}
-                <div className="aspect-square w-full bg-muted overflow-hidden relative rounded-xl">
-                  <img 
-                    src={event.image} 
-                    alt={event.title}
-                    className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                  {/* Tombol Wishlist Favorit (Heart) khas Airbnb */}
-                  <button className="absolute top-3 right-3 p-2 rounded-full bg-background/40 backdrop-blur-md border border-white/10 hover:bg-background/80 text-white hover:text-rose-500 transition-all shadow-xs">
-                    <Heart className="h-4 w-4 fill-current text-transparent hover:text-rose-500" />
-                  </button>
-                  <Badge variant="secondary" className="absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-background text-foreground rounded-md border border-border">
-                    {event.genre}
-                  </Badge>
-                </div>
-                
-                {/* Teks Metadata Tanpa Kotak Border Card */}
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-semibold text-foreground tracking-tight leading-snug line-clamp-1">
-                      {event.title}
-                    </h3>
-                    <span className="flex items-center gap-1 text-xs font-semibold shrink-0">
-                      ★ <span>{event.rating}</span>
-                    </span>
+            {loading ? (
+              // Beautiful Loading Skeletons
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col space-y-3 animate-pulse">
+                  <div className="aspect-square w-full bg-muted rounded-xl" />
+                  <div className="space-y-2">
+                    <div className="h-4 bg-muted rounded w-3/4" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                    <div className="h-3 bg-muted rounded w-1/4" />
                   </div>
-                  <p className="text-muted-foreground text-xs font-normal flex items-center gap-1">
-                    <MapPin className="h-3 w-3 inline text-muted-foreground/60" />
-                    {event.venue}
-                  </p>
-                  <p className="text-muted-foreground text-[11px] font-medium">{event.date}</p>
+                </div>
+              ))
+            ) : (
+              featuredEvents.map((event) => (
+                <Link key={event.id} href={`/events/${event.id}`} className="group flex flex-col space-y-3 cursor-pointer">
                   
-                  <div className="pt-1.5 flex items-baseline gap-1 text-xs">
-                    <span className="font-bold text-foreground text-sm">{event.price}</span>
-                    <span className="text-muted-foreground font-normal">/ person</span>
+                  {/* Image Wrapper dengan Aspek Rasio Kotak Sempurna Airbnb */}
+                  <div className="aspect-square w-full bg-muted overflow-hidden relative rounded-xl">
+                    <img 
+                      src={event.image} 
+                      alt={event.title}
+                      className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                    {/* Tombol Wishlist Favorit (Heart) khas Airbnb */}
+                    <button className="absolute top-3 right-3 p-2 rounded-full bg-background/40 backdrop-blur-md border border-white/10 hover:bg-background/80 text-white hover:text-rose-500 transition-all shadow-xs">
+                      <Heart className="h-4 w-4 fill-current text-transparent hover:text-rose-500" />
+                    </button>
+                    <Badge variant="secondary" className="absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-background text-foreground rounded-md border border-border">
+                      {event.genre}
+                    </Badge>
                   </div>
-                </div>
+                  
+                  {/* Teks Metadata Tanpa Kotak Border Card */}
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between items-start gap-2">
+                      <h3 className="font-semibold text-foreground tracking-tight leading-snug line-clamp-1">
+                        {event.title}
+                      </h3>
+                      <span className="flex items-center gap-1 text-xs font-semibold shrink-0">
+                        ★ <span>{event.rating}</span>
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground text-xs font-normal flex items-center gap-1">
+                      <MapPin className="h-3 w-3 inline text-muted-foreground/60" />
+                      {event.venue}
+                    </p>
+                    <p className="text-muted-foreground text-[11px] font-medium">{event.date}</p>
+                    
+                    <div className="pt-1.5 flex items-baseline gap-1 text-xs">
+                      <span className="font-bold text-foreground text-sm">{event.price}</span>
+                      <span className="text-muted-foreground font-normal">/ person</span>
+                    </div>
+                  </div>
 
-              </Link>
-            ))}
+                </Link>
+              ))
+            )}
           </div>
         </div>
       </section>

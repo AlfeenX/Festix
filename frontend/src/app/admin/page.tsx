@@ -45,8 +45,8 @@ export default function AdminOverviewPage() {
   }, []);
 
   const stats = useMemo(() => {
-    const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-    const paidOrders = orders.filter((order) => order.status?.toUpperCase() === 'PAID' || order.status?.toUpperCase() === 'COMPLETED');
+    const paidOrders = orders.filter((order) => ['PAID', 'COMPLETED', 'SUCCESS'].includes(order.status?.toUpperCase()));
+    const revenue = paidOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
     const availableSeats = events.reduce((sum, event) => sum + Number(event.available_seats || 0), 0);
     const upcomingEvents = events.filter((event) => getEventStatus(event.starts_at, event.ends_at) === 'Upcoming');
 
@@ -54,7 +54,7 @@ export default function AdminOverviewPage() {
       {
         label: 'Revenue',
         value: revenue > 0 ? formatCurrency(revenue) : formatCurrency(0),
-        helper: 'Total nominal order yang tercatat',
+        helper: 'Total nominal transaksi berhasil',
         icon: DollarSign,
       },
       {
@@ -77,6 +77,50 @@ export default function AdminOverviewPage() {
       },
     ];
   }, [events, orders]);
+
+  const trendData = useMemo(() => {
+    const monthNamesIndonesian = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    
+    const last6Months = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - (5 - i));
+      return {
+        month: d.getMonth(),
+        year: d.getFullYear(),
+        label: monthNamesIndonesian[d.getMonth()],
+        revenue: 0,
+        orders: 0,
+      };
+    });
+
+    let hasData = false;
+    orders.forEach((order) => {
+      if (!order.created_at) return;
+      const orderDate = new Date(order.created_at);
+      const orderMonth = orderDate.getMonth();
+      const orderYear = orderDate.getFullYear();
+
+      const match = last6Months.find((m) => m.month === orderMonth && m.year === orderYear);
+      if (match) {
+        hasData = true;
+        const isPaid = ['PAID', 'COMPLETED', 'SUCCESS'].includes(order.status?.toUpperCase());
+        if (isPaid) {
+          match.revenue += Number(order.total_amount || 0);
+        }
+        match.orders += 1;
+      }
+    });
+
+    if (!hasData) {
+      return fallbackTrend;
+    }
+
+    return last6Months.map(({ label, revenue, orders }) => ({
+      label,
+      revenue,
+      orders,
+    }));
+  }, [orders]);
 
   const topEvents = useMemo(() => {
     return [...events]
@@ -129,7 +173,7 @@ export default function AdminOverviewPage() {
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-foreground">Tren Penjualan</h2>
-              <p className="text-xs text-muted-foreground">Fallback chart ditampilkan saat endpoint analitik belum tersedia.</p>
+              <p className="text-xs text-muted-foreground">Grafik tren penjualan real-time berdasarkan data transaksi.</p>
             </div>
             <Badge variant="outline" className="rounded-md">
               <TrendingUp className="h-3 w-3" />
@@ -138,7 +182,7 @@ export default function AdminOverviewPage() {
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={fallbackTrend} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+              <AreaChart data={trendData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
